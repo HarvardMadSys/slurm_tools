@@ -8,9 +8,13 @@ partition to use based on your resource requirements.
 By default, it uses available (unallocated) resources for more realistic recommendations.
 Use --total-resources to use total partition capacity instead.
 
+Supports GPU filtering by type and memory for more targeted recommendations.
+
 Usage:
     python best_partition.py --cpu 4 --mem 8 --gpu 1
     python best_partition.py --cpu 4 --mem 8 --total-resources
+    python best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+    python best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 """
 
 import subprocess
@@ -24,7 +28,8 @@ class PartitionInfo:
     
     def __init__(self, name, max_time, total_cpus, total_nodes, total_memory_mb, 
                  total_gpus, billing_weights, state, priority_tier, 
-                 available_cpus=None, available_memory_mb=None, available_gpus=None):
+                 available_cpus=None, available_memory_mb=None, available_gpus=None,
+                 gpu_types=None, gpu_memories=None):
         self.name = name
         self.max_time = max_time
         self.total_cpus = total_cpus
@@ -38,6 +43,9 @@ class PartitionInfo:
         self.available_cpus = available_cpus
         self.available_memory_mb = available_memory_mb
         self.available_gpus = available_gpus
+        # GPU information (lists to handle multiple types per partition)
+        self.gpu_types = gpu_types if gpu_types else []
+        self.gpu_memories = gpu_memories if gpu_memories else []
     
     def calculate_cost(self, cpu_req, memory_gb_req, gpu_req):
         """Calculate the billing cost for given requirements."""
@@ -62,6 +70,26 @@ class PartitionInfo:
         return (self.available_cpus is not None and 
                 self.available_memory_mb is not None and 
                 self.available_gpus is not None)
+    
+    def has_gpu_type(self, gpu_type):
+        """Check if this partition has the specified GPU type."""
+        return gpu_type.lower() in [t.lower() for t in self.gpu_types]
+    
+    def has_gpu_memory(self, gpu_memory):
+        """Check if this partition has the specified GPU memory."""
+        return gpu_memory.lower() in [m.lower() for m in self.gpu_memories]
+    
+    def gpu_info_str(self):
+        """Return a formatted string with GPU information."""
+        if self.gpu_types:
+            types_str = ",".join(self.gpu_types)
+            if self.gpu_memories:
+                memories_str = ",".join(set(self.gpu_memories))  # Remove duplicates
+                return "{}_{}".format(types_str, memories_str)
+            else:
+                return types_str
+        else:
+            return "unknown"
 
 
 def run_scontrol():
@@ -251,6 +279,78 @@ def extract_gpu_from_tres(tres_str):
     return 0
 
 
+def parse_gpu_info(gres_str):
+    """Parse GPU type and memory from Gres string."""
+    if not gres_str:
+        return None, None
+    
+    # Look for patterns like "nvidia_a100-sxm4-80gb:4" or "nvidia_h100_80gb_hbm3:8"
+    # Extract GPU type (a100, h100, v100, etc.) and memory (80gb, 40gb, etc.)
+    
+    # First, try to match full pattern with memory
+    gpu_match = re.search(r'nvidia_([^-_:]+)(?:[^:]*?)(?:_(\d+gb))?[^:]*?:', gres_str)
+    if gpu_match:
+        gpu_type = gpu_match.group(1).lower()
+        gpu_memory = gpu_match.group(2).lower() if gpu_match.group(2) else None
+        return gpu_type, gpu_memory
+    
+    # Alternative patterns to try
+    # Pattern: nvidia_a100-sxm4-80gb:4
+    gpu_match = re.search(r'nvidia_([^-_:]+)(?:.*?)(\d+gb)', gres_str)
+    if gpu_match:
+        gpu_type = gpu_match.group(1).lower()
+        gpu_memory = gpu_match.group(2).lower()
+        return gpu_type, gpu_memory
+    
+    # Simple pattern: nvidia_a100:4
+    gpu_match = re.search(r'nvidia_([^-_:]+)', gres_str)
+    if gpu_match:
+        gpu_type = gpu_match.group(1).lower()
+        return gpu_type, None
+    
+    return None, None
+
+
+def get_partition_gpu_info(partition_name):
+    """Get GPU information for a partition by querying its nodes."""
+    node_list = get_partition_nodes(partition_name)
+    if not node_list:
+        return [], []
+    
+    try:
+        result = subprocess.run(['scontrol', 'show', 'node', node_list], 
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                              universal_newlines=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print("Error getting node info for partition {}: {}".format(partition_name, e))
+        return [], []
+    
+    # Parse node information to find GPU types
+    gpu_types = set()
+    gpu_memories = set()
+    
+    for node_block in result.stdout.split('\n\n'):
+        if not node_block.strip():
+            continue
+            
+        # Skip DOWN nodes
+        if 'State=DOWN' in node_block:
+            continue
+            
+        # Extract GPU information
+        gres_match = re.search(r'Gres=([^\s]+)', node_block)
+        if gres_match:
+            gres_str = gres_match.group(1)
+            gpu_type, gpu_memory = parse_gpu_info(gres_str)
+            if gpu_type:
+                gpu_types.add(gpu_type)
+            if gpu_memory:
+                gpu_memories.add(gpu_memory)
+    
+    # Return all found GPU types and memories as lists
+    return list(gpu_types), list(gpu_memories)
+
+
 def parse_partition_output(output):
     """Parse scontrol show partition output into PartitionInfo objects."""
     partitions = []
@@ -334,7 +434,22 @@ def populate_available_resources(partitions):
                 partition.available_gpus = 0
 
 
-def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours=None, use_available=False):
+def populate_gpu_info(partitions):
+    """Populate GPU type and memory information for all partitions."""
+    for partition in partitions:
+        if partition.state == "UP" and partition.total_gpus > 0:
+            try:
+                gpu_types, gpu_memories = get_partition_gpu_info(partition.name)
+                partition.gpu_types = gpu_types
+                partition.gpu_memories = gpu_memories
+            except Exception as e:
+                print("Warning: Could not get GPU info for partition {}: {}".format(partition.name, e))
+                partition.gpu_types = []
+                partition.gpu_memories = []
+
+
+def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours=None, 
+                              use_available=False, gpu_type=None, gpu_memory=None):
     """Filter partitions that can accommodate the requirements."""
     suitable = []
     
@@ -342,6 +457,16 @@ def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_
         # Skip if partition is not up
         if partition.state != "UP":
             continue
+        
+        # GPU type filtering - skip if GPU type is requested but partition has no GPU type info
+        if gpu_type:
+            if not partition.has_gpu_type(gpu_type):
+                continue
+        
+        # GPU memory filtering - skip if GPU memory is requested but partition has no GPU memory info
+        if gpu_memory:
+            if not partition.has_gpu_memory(gpu_memory):
+                continue
         
         # Choose whether to use available or total resources
         if use_available and partition.has_available_resources():
@@ -379,10 +504,11 @@ def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_
     return suitable
 
 
-def find_best_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours=None, use_available=False):
+def find_best_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours=None, 
+                        use_available=False, gpu_type=None, gpu_memory=None):
     """Find the best partitions ranked by cost."""
     suitable_partitions = filter_suitable_partitions(
-        partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours, use_available
+        partitions, cpu_req, memory_gb_req, gpu_req, max_time_hours, use_available, gpu_type, gpu_memory
     )
     
     if not suitable_partitions:
@@ -403,31 +529,33 @@ def find_best_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_time_h
 def print_partition_summary(partitions, show_available=False):
     """Print a summary of all partitions."""
     if show_available:
-        print("{:<20} {:<10} {:<10} {:<10} {:<15} {:<8} {:<15} {:<15} {:<15}".format(
+        print("{:<20} {:<10} {:<10} {:<10} {:<15} {:<8} {:<15} {:<15} {:<15} {:<15} {:<15}".format(
             'Partition', 'CPU Weight', 'Mem Weight', 'GPU Weight', 'Max Time', 'State', 
-            'Avail CPUs', 'Avail Mem(GB)', 'Avail GPUs'))
-        print("-" * 140)
+            'Avail CPUs', 'Avail Mem(GB)', 'Avail GPUs', 'GPU Type', 'GPU Memory'))
+        print("-" * 170)
     else:
-        print("{:<20} {:<10} {:<10} {:<10} {:<15} {:<8}".format(
-            'Partition', 'CPU Weight', 'Mem Weight', 'GPU Weight', 'Max Time', 'State'))
-        print("-" * 90)
+        print("{:<20} {:<10} {:<10} {:<10} {:<15} {:<8} {:<15} {:<15}".format(
+            'Partition', 'CPU Weight', 'Mem Weight', 'GPU Weight', 'Max Time', 'State', 'GPU Type', 'GPU Memory'))
+        print("-" * 120)
     
     for partition in partitions:
         cpu_weight = partition.billing_weights.get('CPU', 0.0)
         mem_weight = partition.billing_weights.get('Mem', 0.0)
         gpu_weight = partition.billing_weights.get('Gres/gpu', 0.0)
+        gpu_types_str = ",".join(partition.gpu_types) if partition.gpu_types else "N/A"
+        gpu_memories_str = ",".join(set(partition.gpu_memories)) if partition.gpu_memories else "N/A"
         
         if show_available:
             avail_cpus = partition.available_cpus if partition.has_available_resources() else "N/A"
             avail_mem_gb = "{:.1f}".format(partition.available_memory_mb / 1024.0) if partition.has_available_resources() else "N/A"
             avail_gpus = partition.available_gpus if partition.has_available_resources() else "N/A"
             
-            print("{:<20} {:<10.3f} {:<10.3f} {:<10.3f} {:<15} {:<8} {:<15} {:<15} {:<15}".format(
+            print("{:<20} {:<10.3f} {:<10.3f} {:<10.3f} {:<15} {:<8} {:<15} {:<15} {:<15} {:<15} {:<15}".format(
                 partition.name, cpu_weight, mem_weight, gpu_weight, partition.max_time, partition.state,
-                avail_cpus, avail_mem_gb, avail_gpus))
+                avail_cpus, avail_mem_gb, avail_gpus, gpu_types_str, gpu_memories_str))
         else:
-            print("{:<20} {:<10.3f} {:<10.3f} {:<10.3f} {:<15} {:<8}".format(
-                partition.name, cpu_weight, mem_weight, gpu_weight, partition.max_time, partition.state))
+            print("{:<20} {:<10.3f} {:<10.3f} {:<10.3f} {:<15} {:<8} {:<15} {:<15}".format(
+                partition.name, cpu_weight, mem_weight, gpu_weight, partition.max_time, partition.state, gpu_types_str, gpu_memories_str))
 
 
 def main():
@@ -439,6 +567,8 @@ def main():
     parser.add_argument('--summary', "-s", action='store_true', help='Show summary of all partitions')
     parser.add_argument('--json', "-j", action='store_true', help='Output results in JSON format')
     parser.add_argument('--total-resources', "--tr", action='store_true', help='Use total resources instead of available resources for filtering and display')
+    parser.add_argument('--gpu-type', type=str, help='Filter by GPU type (e.g., a100, h100, v100)')
+    parser.add_argument('--gpu-memory', type=str, help='Filter by GPU memory (e.g., 80gb, 40gb)')
     
     args = parser.parse_args()
     
@@ -459,6 +589,11 @@ def main():
         print("Fetching available resources...")
         populate_available_resources(partitions)
     
+    # Populate GPU information if GPU filtering is requested or if GPUs are needed
+    if args.gpu_type or args.gpu_memory or args.gpu > 0 or args.summary:
+        print("Fetching GPU information...")
+        populate_gpu_info(partitions)
+    
     if args.summary:
         print_partition_summary(partitions, use_available_resources)
         return
@@ -470,7 +605,8 @@ def main():
     
     # Find best partitions
     best_partitions = find_best_partitions(
-        partitions, args.cpu, args.mem, args.gpu, args.time, use_available_resources
+        partitions, args.cpu, args.mem, args.gpu, args.time, use_available_resources, 
+        args.gpu_type, args.gpu_memory
     )
     
     if not best_partitions:
@@ -489,7 +625,9 @@ def main():
                 'billing_weights': partition.billing_weights,
                 'total_cpus': partition.total_cpus,
                 'total_memory_gb': partition.total_memory_mb // 1024,
-                'total_gpus': partition.total_gpus
+                'total_gpus': partition.total_gpus,
+                'gpu_types': partition.gpu_types,
+                'gpu_memories': partition.gpu_memories
             }
             
             # Add available resources if populated
@@ -507,6 +645,10 @@ def main():
         print("  CPUs: {}".format(args.cpu))
         print("  Memory: {} GB".format(args.mem))
         print("  GPUs: {}".format(args.gpu))
+        if args.gpu_type:
+            print("  GPU type: {}".format(args.gpu_type))
+        if args.gpu_memory:
+            print("  GPU memory: {}".format(args.gpu_memory))
         if args.time:
             print("  Max time: {} hours".format(args.time))
         print()
@@ -527,14 +669,20 @@ def main():
                 if partition.available_memory_mb > 0:
                     details.append("{} GB".format(partition.available_memory_mb//1024))
                 if partition.available_gpus > 0:
-                    details.append("{} GPUs".format(partition.available_gpus))
+                    gpu_detail = "{} GPUs".format(partition.available_gpus)
+                    if partition.gpu_types:
+                        gpu_detail += " ({})".format(partition.gpu_info_str())
+                    details.append(gpu_detail)
             else:
                 if partition.total_cpus > 0:
                     details.append("{} CPUs".format(partition.total_cpus))
                 if partition.total_memory_mb > 0:
                     details.append("{} GB".format(partition.total_memory_mb//1024))
                 if partition.total_gpus > 0:
-                    details.append("{} GPUs".format(partition.total_gpus))
+                    gpu_detail = "{} GPUs".format(partition.total_gpus)
+                    if partition.gpu_types:
+                        gpu_detail += " ({})".format(partition.gpu_info_str())
+                    details.append(gpu_detail)
             
             details_str = ", ".join(details)
             
@@ -552,10 +700,15 @@ def main():
             
             # Show available resources if requested
             if use_available_resources and best_partition.has_available_resources():
-                print("   Available resources: {} CPUs, {:.1f} GB RAM, {} GPUs".format(
+                gpu_info = "{} GPUs".format(best_partition.available_gpus)
+                if best_partition.gpu_types:
+                    gpu_info += " ({})".format(best_partition.gpu_info_str())
+                print("   Available resources: {} CPUs, {:.1f} GB RAM, {}".format(
                     best_partition.available_cpus, 
                     best_partition.available_memory_mb / 1024.0,
-                    best_partition.available_gpus))
+                    gpu_info))
+            elif best_partition.gpu_types:
+                print("   GPU type: {}".format(best_partition.gpu_info_str()))
             
             # Show sbatch command suggestion
             print("\n📋 Suggested sbatch command:")

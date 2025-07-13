@@ -70,21 +70,73 @@ python3 best_partition.py --cpu 4 --mem 8 --total-resources --json
 - `--summary`: Show summary of all partitions (optional)
 - `--json`: Output results in JSON format (optional)
 - `--total-resources`: Use total resources instead of available resources for filtering and display (optional)
+- `--gpu-type`: Filter by GPU type (e.g., a100, h100, v100) (optional)
+- `--gpu-memory`: Filter by GPU memory (e.g., 80gb, 40gb) (optional)
+
+## GPU Filtering
+
+The script supports advanced GPU filtering to help you find partitions with specific GPU types and memory configurations.
+
+### GPU Type Filtering
+
+Filter partitions by GPU type (e.g., A100, H100, V100):
+
+```bash
+# Find partitions with A100 GPUs
+python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+
+# Find partitions with H100 GPUs
+python3 best_partition.py --cpu 4 --mem 8 --gpu 2 --gpu-type h100
+```
+
+### GPU Memory Filtering
+
+Filter partitions by GPU memory size:
+
+```bash
+# Find partitions with 80GB GPUs
+python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+
+# Find partitions with 40GB GPUs
+python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
+```
+
+### Combined GPU Filtering
+
+Combine both GPU type and memory filtering:
+
+```bash
+# Find partitions with A100 80GB GPUs specifically
+python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
+```
+
+### GPU Information in Summary
+
+The summary mode now shows GPU type and memory information:
+
+```bash
+python3 best_partition.py --summary
+```
+
+This will display GPU Type and GPU Memory columns showing the GPU specifications for each partition.
 
 ## How It Works
 
 1. **Data Collection**: Runs `scontrol show partition` to get partition information
 2. **Resource Fetching** (default): Queries `scontrol show node` to determine currently available resources
-3. **Parsing**: Extracts `TRESBillingWeights`, resource limits, and other metadata
-4. **Filtering**: Removes partitions that cannot meet your requirements:
+3. **GPU Information** (when needed): Queries node-level GPU information to determine GPU types and memory
+4. **Parsing**: Extracts `TRESBillingWeights`, resource limits, and other metadata
+5. **Filtering**: Removes partitions that cannot meet your requirements:
    - Insufficient CPUs, memory, or GPUs (available by default, or total if `--total-resources` is used)
+   - GPU type mismatch (if `--gpu-type` is specified)
+   - GPU memory mismatch (if `--gpu-memory` is specified)
    - Time limits shorter than required
    - Partitions not in "UP" state
-5. **Cost Calculation**: Calculates billing cost using the formula:
+6. **Cost Calculation**: Calculates billing cost using the formula:
    ```
    Cost = (CPU_count × CPU_weight) + (Memory_GB × Memory_weight) + (GPU_count × GPU_weight)
    ```
-6. **Ranking**: Sorts partitions by cost (ascending) and priority tier (lower is better)
+7. **Ranking**: Sorts partitions by cost (ascending) and priority tier (lower is better)
 
 ## Available vs Total Resources
 
@@ -113,55 +165,71 @@ Recommended partitions for your requirements (using available resources):
 
 Rank Partition            Cost       Max Time        Priority Available Resources
 -------------------------------------------------------------------------------------
-1    gpu_test             0.000      12:00:00        4        620 CPUs, 4308 GB, 81 GPUs
-2    serial_requeue       107.600    3-00:00:00      1        22468 CPUs, 364341 GB, 285 GPUs
-3    gpu_requeue          107.600    3-00:00:00      2        7614 CPUs, 174125 GB, 285 GPUs
+1    gpu_test             0.000      12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
+2    serial_requeue       107.600    3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
+3    gpu_requeue          107.600    3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
 
 🎯 Best recommendation: gpu_test
    Cost: 0.000 billing units
    Max time: 12:00:00
    Priority tier: 4
    Billing weights: {'CPU': 0.0, 'Mem': 0.0, 'Gres/gpu': 0.0}
-   Available resources: 620 CPUs, 4308.5 GB RAM, 81 GPUs
+   Available resources: 605 CPUs, 4081.8 GB RAM, 82 GPUs (a100)
 
 📋 Suggested sbatch command:
    sbatch --partition=gpu_test --cpus-per-task=4 --mem=8G --gres=gpu:1 your_script.sh
 ```
 
-### Total Resources Mode
+### GPU Type Filtering
 ```bash
-$ python3 best_partition.py --cpu 4 --mem 8 --total-resources
+$ python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
 
-Recommended partitions for your requirements (using total resources):
+Recommended partitions for your requirements (using available resources):
   CPUs: 4
   Memory: 8.0 GB
-  GPUs: 0
+  GPUs: 1
+  GPU type: a100
 
-Rank Partition            Cost       Max Time        Priority Total Resources
+Rank Partition            Cost       Max Time        Priority Available Resources
 -------------------------------------------------------------------------------------
-1    gpu_test             0.000      12:00:00        4        896 CPUs, 7042 GB, 112 GPUs
-2    test                 0.000      12:00:00        5        2016 CPUs, 18126 GB
-3    bigmem               2.640      3-00:00:00      3        448 CPUs, 8060 GB
+1    gpu_test             0.000      12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
+2    gpu                  214.260    3-00:00:00      3        162 CPUs, 15745 GB, 6 GPUs (a100)
 
 🎯 Best recommendation: gpu_test
    Cost: 0.000 billing units
    Max time: 12:00:00
    Priority tier: 4
    Billing weights: {'CPU': 0.0, 'Mem': 0.0, 'Gres/gpu': 0.0}
-
-📋 Suggested sbatch command:
-   sbatch --partition=gpu_test --cpus-per-task=4 --mem=8G your_script.sh
+   Available resources: 605 CPUs, 4081.8 GB RAM, 82 GPUs (a100)
 ```
 
-### Summary with Available Resources (Default)
+### GPU Memory Filtering
+```bash
+$ python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+
+Recommended partitions for your requirements (using available resources):
+  CPUs: 4
+  Memory: 8.0 GB
+  GPUs: 1
+  GPU memory: 80gb
+
+Rank Partition            Cost       Max Time        Priority Available Resources
+-------------------------------------------------------------------------------------
+1    serial_requeue       107.600    3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
+2    gpu_requeue          107.600    3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
+3    seas_gpu             337.280    7-00:00:00      3        1299 CPUs, 27983 GB, 22 GPUs
+```
+
+### Summary with GPU Information
 ```bash
 $ python3 best_partition.py --summary
 
-Partition            CPU Weight Mem Weight GPU Weight Max Time        State    Avail CPUs      Avail Mem(GB)   Avail GPUs
-----------------------------------------------------------------------------------------------------------------------------
-gpu_test             0.000      0.000      0.000      12:00:00        UP       620             4308.5          81
-gpu                  1.150      0.070      209.100    3-00:00:00      UP       219             18305.5         5
-seas_gpu             0.900      0.060      333.200    7-00:00:00      UP       1965            32433.5         34
+Partition            CPU Weight Mem Weight GPU Weight Max Time        State    Avail CPUs      Avail Mem(GB)   Avail GPUs      GPU Type        GPU Memory
+------------------------------------------------------------------------------------------------------------------------------------
+gpu_test             0.000      0.000      0.000      12:00:00        UP       605             4081.8          82              a100            N/A
+gpu                  1.150      0.070      209.100    3-00:00:00      UP       162             15745.5         6               a100            N/A
+gpu_requeue          0.500      0.125      104.600    3-00:00:00      UP       5861            162233.3        276             N/A             80gb
+seas_gpu             0.900      0.060      333.200    7-00:00:00      UP       1299            27983.5         22              N/A             80gb
 ```
 
 ## Understanding TRESBillingWeights
@@ -181,4 +249,6 @@ The script helps you find the partition with the lowest total cost for your spec
 - For production workloads, avoid test partitions which typically have short time limits
 - **Available resources mode is the default** - it shows what's actually available right now rather than theoretical capacity
 - Available resources mode is particularly useful during busy periods when many partitions may appear to have capacity but are actually fully utilized
-- Use `--total-resources` when you need to see partition limits for planning purposes or when available resources aren't relevant 
+- Use `--total-resources` when you need to see partition limits for planning purposes or when available resources aren't relevant
+- **GPU filtering helps find the right hardware** - use `--gpu-type` and `--gpu-memory` to ensure you get the specific GPU hardware needed for your workload
+- Some partitions may not have complete GPU information (showing "N/A") - this is normal for partitions with mixed GPU types or where GPU specs cannot be determined 
