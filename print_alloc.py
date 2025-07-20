@@ -203,13 +203,13 @@ def main():
     parser = argparse.ArgumentParser(description='Display SLURM node allocation information')
     parser.add_argument('--available', '-a', action='store_true', 
                        help='Show available (free) CPU and memory instead of unallocated')
-    parser.add_argument('--partition', '-p', default='seas_gpu',
-                       help='Partition to query (default: seas_gpu)')
+    parser.add_argument('--partition', '-p', default='gpu_requeue',
+                       help='Partition to query (default: gpu_requeue)')
     
     args = parser.parse_args()
     
     try:
-        # Get nodes from seas_gpu partition
+        # Get nodes from gpu_requeue partition
         node_list = get_partition_nodes(args.partition)
         
         # Parse node information

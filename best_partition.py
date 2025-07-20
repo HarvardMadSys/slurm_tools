@@ -15,6 +15,7 @@ Usage:
     python best_partition.py --cpu 4 --mem 8 --total-resources
     python best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
     python best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
+    python best_partition.py --cpu 4 --mem 8 --name-only  # Just print partition name
 """
 
 import subprocess
@@ -208,7 +209,7 @@ def get_available_resources(partition_name):
     return total_available_cpus, total_available_memory_mb, total_available_gpus
 
 
-def parse_billing_weights(weights_str):
+def parse_billing_weights(weights_str, quiet=False):
     """Parse TRESBillingWeights string into a dictionary."""
     weights = {}
     if not weights_str:
@@ -228,7 +229,8 @@ def parse_billing_weights(weights_str):
             try:
                 weights[key] = float(value)
             except ValueError:
-                print("Warning: Could not parse weight value '{}' for '{}'".format(value, key))
+                if not quiet:
+                    print("Warning: Could not parse weight value '{}' for '{}'".format(value, key))
                 weights[key] = 0.0
     
     return weights
@@ -351,7 +353,7 @@ def get_partition_gpu_info(partition_name):
     return list(gpu_types), list(gpu_memories)
 
 
-def parse_partition_output(output):
+def parse_partition_output(output, quiet=False):
     """Parse scontrol show partition output into PartitionInfo objects."""
     partitions = []
     
@@ -391,7 +393,7 @@ def parse_partition_output(output):
         # Extract billing weights
         weights_match = re.search(r'TRESBillingWeights=([^\n]+)', block)
         weights_str = weights_match.group(1) if weights_match else ""
-        billing_weights = parse_billing_weights(weights_str)
+        billing_weights = parse_billing_weights(weights_str, quiet)
         
         # Extract state
         state_match = re.search(r'State=([^\s]+)', block)
@@ -418,7 +420,7 @@ def parse_partition_output(output):
     return partitions
 
 
-def populate_available_resources(partitions):
+def populate_available_resources(partitions, quiet=False):
     """Populate available resources for all partitions."""
     for partition in partitions:
         if partition.state == "UP":
@@ -428,13 +430,14 @@ def populate_available_resources(partitions):
                 partition.available_memory_mb = available_memory_mb
                 partition.available_gpus = available_gpus
             except Exception as e:
-                print("Warning: Could not get available resources for partition {}: {}".format(partition.name, e))
+                if not quiet:
+                    print("Warning: Could not get available resources for partition {}: {}".format(partition.name, e))
                 partition.available_cpus = 0
                 partition.available_memory_mb = 0
                 partition.available_gpus = 0
 
 
-def populate_gpu_info(partitions):
+def populate_gpu_info(partitions, quiet=False):
     """Populate GPU type and memory information for all partitions."""
     for partition in partitions:
         if partition.state == "UP" and partition.total_gpus > 0:
@@ -443,7 +446,8 @@ def populate_gpu_info(partitions):
                 partition.gpu_types = gpu_types
                 partition.gpu_memories = gpu_memories
             except Exception as e:
-                print("Warning: Could not get GPU info for partition {}: {}".format(partition.name, e))
+                if not quiet:
+                    print("Warning: Could not get GPU info for partition {}: {}".format(partition.name, e))
                 partition.gpu_types = []
                 partition.gpu_memories = []
 
@@ -456,6 +460,10 @@ def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_
     for partition in partitions:
         # Skip if partition is not up
         if partition.state != "UP":
+            continue
+        
+        # Skip serial_requeue partition when GPUs are required
+        if gpu_req > 0 and partition.name == "serial_requeue":
             continue
         
         # GPU type filtering - skip if GPU type is requested but partition has no GPU type info
@@ -566,6 +574,7 @@ def main():
     parser.add_argument('--time', "-t", type=int, help='Maximum time required in hours')
     parser.add_argument('--summary', "-s", action='store_true', help='Show summary of all partitions')
     parser.add_argument('--json', "-j", action='store_true', help='Output results in JSON format')
+    parser.add_argument('--name-only', "-n", action='store_true', help='Print only the name of the best partition (useful for scripting)')
     parser.add_argument('--total-resources', "--tr", action='store_true', help='Use total resources instead of available resources for filtering and display')
     parser.add_argument('--gpu-type', type=str, help='Filter by GPU type (e.g., a100, h100, v100)')
     parser.add_argument('--gpu-memory', type=str, help='Filter by GPU memory (e.g., 80gb, 40gb)')
@@ -576,23 +585,27 @@ def main():
     use_available_resources = not args.total_resources
     
     # Get partition information
-    print("Fetching partition information...")
+    if not args.name_only:
+        print("Fetching partition information...")
     output = run_scontrol()
     if not output:
-        print("Failed to get partition information.")
+        if not args.name_only:
+            print("Failed to get partition information.")
         return
     
-    partitions = parse_partition_output(output)
+    partitions = parse_partition_output(output, quiet=args.name_only)
     
     # Always populate available resources since it's the default mode
     if use_available_resources:
-        print("Fetching available resources...")
-        populate_available_resources(partitions)
+        if not args.name_only:
+            print("Fetching available resources...")
+        populate_available_resources(partitions, quiet=args.name_only)
     
     # Populate GPU information if GPU filtering is requested or if GPUs are needed
     if args.gpu_type or args.gpu_memory or args.gpu > 0 or args.summary:
-        print("Fetching GPU information...")
-        populate_gpu_info(partitions)
+        if not args.name_only:
+            print("Fetching GPU information...")
+        populate_gpu_info(partitions, quiet=args.name_only)
     
     if args.summary:
         print_partition_summary(partitions, use_available_resources)
@@ -600,7 +613,8 @@ def main():
     
     # Check required arguments for non-summary mode
     if args.cpu is None or args.mem is None:
-        print("Error: --cpu and --mem are required unless using --summary")
+        if not args.name_only:
+            print("Error: --cpu and --mem are required unless using --summary")
         return
     
     # Find best partitions
@@ -610,7 +624,14 @@ def main():
     )
     
     if not best_partitions:
-        print("No suitable partitions found for your requirements.")
+        if not args.name_only:
+            print("No suitable partitions found for your requirements.")
+        return
+    
+    # Handle name-only output
+    if args.name_only:
+        best_partition, _ = best_partitions[0]
+        print(best_partition.name)
         return
     
     if args.json:
