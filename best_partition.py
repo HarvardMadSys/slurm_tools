@@ -466,6 +466,12 @@ def filter_suitable_partitions(partitions, cpu_req, memory_gb_req, gpu_req, max_
         if gpu_req > 0 and partition.name == "serial_requeue":
             continue
         
+        if gpu_req == 0 and partition.name == "gpu_requeue":
+            continue
+        
+        if gpu_req == 0 and partition.name == "gpu_test":
+            continue
+        
         # GPU type filtering - skip if GPU type is requested but partition has no GPU type info
         if gpu_type:
             if not partition.has_gpu_type(gpu_type):

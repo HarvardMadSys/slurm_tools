@@ -1,30 +1,31 @@
 #!/bin/bash
 
-# usage: bash $0 -j JOB_NAME -c CPU_CORE -m MEM_GB -u GPU_TYPE -g GPU_COUNT -t TIMEOUT_HOURS
+VERSION="0.1.0"
 
 # default values
-JOB_NAME="h100_$(whoami)"
+JOB_NAME=""
 CPU_CORE=16
 MEM_GB=256
-GPU_TYPE="h100"
+GPU_TYPE="h200"
 GPU_COUNT=0
 TIMEOUT_HOURS=12
 PARTITION="best"
 
 usage(){
     echo "usage: $0 [-j JOB_NAME] [-c CPU_CORE] [-m MEM_GB] [-u GPU_TYPE] [-g GPU_COUNT] [-t TIMEOUT_HOURS] [-p PARTITION]"
-    echo "default values: JOB_NAME=h100_$(whoami), CPU_CORE=16, MEM_GB=256, GPU_TYPE=h100, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
-    echo "example: $0 -j h100_$(whoami) -c 16 -m 256 -g 1 -u h100 -t 12 -p best"
-    echo "gpu types: h100, a100, a100-80gb, a100-40gb, a40, h200"
+    echo "default values: JOB_NAME=$(whoami), CPU_CORE=16, MEM_GB=256, GPU_TYPE=h100, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
+    echo "example: $0 -j $(whoami) -c 16 -m 256 -g 1 -u h100 -t 12 -p best"
+    echo "gpu types: h100, h200, a100, a100-80gb, a100-40gb, a40, nvidia_a100_3g.20gb"
     echo ""
     echo "Options:"
-    echo "  -j JOB_NAME        Job name (default: h100_$(whoami))"
+    echo "  -j JOB_NAME        Job name (default: $(whoami))"
     echo "  -c CPU_CORE        Number of CPU cores (default: 16)"
     echo "  -m MEM_GB          Memory in GB (default: 256)"
     echo "  -u GPU_TYPE        GPU type (default: h100)"
     echo "  -g GPU_COUNT       Number of GPUs (default: 1)"
     echo "  -t TIMEOUT_HOURS   Timeout in hours (default: 12)"
     echo "  -p PARTITION       Partition (default: best)"
+    echo "  -v                 Show version"
     echo "  -h                 Show this help message"
     exit 1
 }
@@ -37,7 +38,7 @@ print_log() {
 trap 'echo "Ctrl+C pressed, cancelling job..."; scancel $job_id; exit 1' INT
 
 # Parse command line arguments
-while getopts "j:c:m:g:n:t:p:h" opt; do
+while getopts "j:c:m:g:u:t:p:v:h" opt; do
     case $opt in
         j) JOB_NAME="$OPTARG" ;;
         c) CPU_CORE="$OPTARG" ;;
@@ -46,14 +47,33 @@ while getopts "j:c:m:g:n:t:p:h" opt; do
         g) GPU_COUNT="$OPTARG" ;;
         t) TIMEOUT_HOURS="$OPTARG" ;;
         p) PARTITION="$OPTARG" ;;
+        v) echo "version: $VERSION" && exit 0 ;;
         h) usage ;;
         \?) echo "Invalid option -$OPTARG" >&2; usage ;;
     esac
 done
 
+# if JOB_NAME is not set, set it to the current user name
+if [ -z "${JOB_NAME}" ]; then
+    # if gpu count is 0, set JOB_NAME to the current user name
+    if [ ${GPU_COUNT} -eq 0 ]; then
+        JOB_NAME="$(whoami)"
+    else
+        JOB_NAME="${GPU_COUNT}${GPU_TYPE}"
+    fi
+fi
+
 # if PARTITION is best, find the best partition
 if [ "${PARTITION}" == "best" ]; then
-    PARTITION=$(best_partition -n -c ${CPU_CORE} -m ${MEM_GB} --gpu-type ${GPU_TYPE} -g ${GPU_COUNT} -t ${TIMEOUT_HOURS} --name-only)
+    if [ ${GPU_COUNT} -gt 0 ]; then
+        if [ "${GPU_TYPE}" == "a100mig" ]; then
+            PARTITION="gpu_test"
+        else
+            PARTITION=$(best_partition -n -c ${CPU_CORE} -m ${MEM_GB} --gpu-type ${GPU_TYPE} -g ${GPU_COUNT} -t ${TIMEOUT_HOURS} --name-only)
+        fi
+    else
+        PARTITION=$(best_partition -n -c ${CPU_CORE} -m ${MEM_GB} -t ${TIMEOUT_HOURS} --name-only)
+    fi
     if [ -z "${PARTITION}" ]; then
         print_log "No suitable partitions found for your requirements."
         exit 1
@@ -76,6 +96,8 @@ fi
 
 if [ "${GPU_TYPE}" == "h100" ]; then
     GPU_TYPE="nvidia_h100_80gb_hbm3"
+elif [ "${GPU_TYPE}" == "h200" ]; then
+    GPU_TYPE="nvidia_h200"
 elif [ "${GPU_TYPE}" == "a100" ]; then
     GPU_TYPE="nvidia_a100-sxm4-80gb"
 elif [ "${GPU_TYPE}" == "a100-80gb" ]; then
@@ -84,8 +106,8 @@ elif [ "${GPU_TYPE}" == "a100-40gb" ]; then
     GPU_TYPE="nvidia_a100-sxm4-40gb"
 elif [ "${GPU_TYPE}" == "a40" ]; then
     GPU_TYPE="nvidia_a40"
-elif [ "${GPU_TYPE}" == "h200" ]; then
-    GPU_TYPE="nvidia_h200"
+elif [ "${GPU_TYPE}" == "a100mig" ]; then
+    GPU_TYPE="nvidia_a100_3g.20gb"
 else
     print_log "Invalid GPU type: ${GPU_TYPE}"
     exit 1
@@ -96,6 +118,7 @@ s=$(sbatch -p ${PARTITION} \
       --mem=${MEM_GB}g \
       --time=${TIMEOUT_STRING} \
       -c ${CPU_CORE} \
+      --mail-type=ALL \
       --output=logs/%x.%j.out \
       --error=logs/%x.%j.err \
       --gres=gpu:${GPU_TYPE}:${GPU_COUNT} \
@@ -115,6 +138,8 @@ while true; do
             # echo "SUCCESS: 8th column starts with 'holy'!"
             # echo "Final status: $s"
             print_log "successfully allocated server job_id $job_id server ${eighth_column}"
+            mkdir -p ~/.alloc 2>/dev/null
+            echo "${eighth_column}" > ~/.alloc/${JOB_NAME}
             break
         fi
         
