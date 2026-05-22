@@ -132,7 +132,6 @@ def get_node_processes(node: str, username: str, process_filter: Optional[str] =
         
         result = subprocess.run(cmd, capture_output=True, text=True, 
                               timeout=30, check=True)
-        print(result.stdout)
         
         processes = []
         total_cpu = 0.0

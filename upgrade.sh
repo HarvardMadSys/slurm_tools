@@ -68,6 +68,9 @@ version_cmp() {
 fetch_remote_version() {
   local tmp body code
   if ! command -v curl >/dev/null 2>&1; then
+    if [[ "${MODE:-}" == "check" ]]; then
+      return 1
+    fi
     abort "curl is required to check for upgrades."
   fi
   tmp="$(mktemp)"
@@ -75,12 +78,12 @@ fetch_remote_version() {
   code="${code//$'\n'/}"
   if [[ "$code" != "200" ]]; then
     rm -f "$tmp"
-    abort "could not fetch ${RAW_VERSION_URL} (HTTP ${code:-unknown})."
+    return 1
   fi
   body="$(read_version_file "$tmp")"
   rm -f "$tmp"
   if [[ -z "$body" ]]; then
-    abort "remote VERSION file is empty."
+    return 1
   fi
   printf "%s" "$body"
 }
@@ -130,9 +133,10 @@ usage: $(basename "$0") [options]
   Check GitHub for a newer release and optionally upgrade the install tree.
 
 Options:
-  -c, --check       Compare versions only (exit 0 if up to date, 1 if upgrade available)
+  -c, --check       Compare versions only (exit 0 up to date, 1 upgrade available, 2 check failed)
   -y, --yes         Apply upgrade without prompting (implies upgrade when newer)
   -n, --dry-run     Show what would be done
+  -q, --quiet       Minimal output (for scripts, e.g. slurm-alloc)
   -V, --version     Print the installed version and exit
   -h, --help        Show this help
 
@@ -146,17 +150,25 @@ EOF
 MODE="upgrade"
 DRY=false
 ASSUME_YES=false
+QUIET=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -c | --check) MODE="check"; shift ;;
     -y | --yes) ASSUME_YES=true; shift ;;
     -n | --dry-run) DRY=true; shift ;;
+    -q | --quiet) QUIET=true; shift ;;
     -V | --version) MODE="version"; shift ;;
     -h | --help) usage; exit 0 ;;
     *) abort "unknown option: $1" ;;
   esac
 done
+
+say() {
+  if [[ "$QUIET" != "true" ]]; then
+    ohai "$@"
+  fi
+}
 
 INSTALL_ROOT="$(resolve_install_root || true)"
 if [[ -z "${INSTALL_ROOT:-}" ]]; then
@@ -174,15 +186,22 @@ if [[ "$MODE" == "version" ]]; then
   exit 0
 fi
 
-ohai "Install root: ${INSTALL_ROOT}"
-ohai "Installed version: ${LOCAL_VERSION}"
+say "Install root: ${INSTALL_ROOT}"
+say "Installed version: ${LOCAL_VERSION}"
 
-REMOTE_VERSION="$(fetch_remote_version)"
-ohai "Latest on GitHub (${GITHUB_BRANCH}): ${REMOTE_VERSION}"
+REMOTE_VERSION="$(fetch_remote_version)" || {
+  warn "could not fetch ${RAW_VERSION_URL}"
+  if [[ "$MODE" == "check" ]]; then
+    exit 2
+  fi
+  abort "version check failed."
+}
+
+say "Latest on GitHub (${GITHUB_BRANCH}): ${REMOTE_VERSION}"
 
 cmp="$(version_cmp "$LOCAL_VERSION" "$REMOTE_VERSION")"
 if [[ "$cmp" == "0" ]]; then
-  ohai "Already up to date."
+  say "Already up to date."
   exit 0
 fi
 
@@ -193,7 +212,7 @@ fi
 
 # cmp == -1: upgrade available
 if [[ "$MODE" == "check" ]]; then
-  ohai "Upgrade available: ${LOCAL_VERSION} → ${REMOTE_VERSION}"
+  say "Upgrade available: ${LOCAL_VERSION} → ${REMOTE_VERSION}"
   exit 1
 fi
 
@@ -210,16 +229,16 @@ if [[ "$ASSUME_YES" != "true" && "$DRY" != "true" ]]; then
 fi
 
 if [[ "$DRY" == "true" ]]; then
-  ohai "[dry-run] Would download ${TARBALL_URL}"
-  ohai "[dry-run] Would extract into ${INSTALL_ROOT}"
-  ohai "[dry-run] Would run ${INSTALL_ROOT}/install.sh"
+  say "[dry-run] Would download ${TARBALL_URL}"
+  say "[dry-run] Would extract into ${INSTALL_ROOT}"
+  say "[dry-run] Would run ${INSTALL_ROOT}/install.sh"
   exit 0
 fi
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-ohai "Downloading ${GITHUB_REPO}@${GITHUB_BRANCH}..."
+say "Downloading ${GITHUB_REPO}@${GITHUB_BRANCH}..."
 curl -fsSL "$TARBALL_URL" | tar -xz --strip-components=1 -C "$STAGE"
 
 NEW_VER="$(read_version_file "${STAGE}/VERSION")"
@@ -227,7 +246,7 @@ if [[ -z "$NEW_VER" ]]; then
   abort "Downloaded tree has no VERSION file."
 fi
 
-ohai "Applying ${NEW_VER} to ${INSTALL_ROOT}..."
+say "Applying ${NEW_VER} to ${INSTALL_ROOT}..."
 # Replace install tree contents; keep user edits only outside tracked files.
 if command -v rsync >/dev/null 2>&1; then
   rsync -a --delete "${STAGE}/" "${INSTALL_ROOT}/"
@@ -237,10 +256,10 @@ else
 fi
 
 if [[ -x "${INSTALL_ROOT}/install.sh" ]]; then
-  ohai "Re-linking commands..."
+  say "Re-linking commands..."
   "${INSTALL_ROOT}/install.sh"
 else
   warn "install.sh missing after upgrade; symlinks may be stale."
 fi
 
-ohai "Upgrade successful! (${LOCAL_VERSION} → ${NEW_VER})"
+say "Upgrade successful! (${LOCAL_VERSION} → ${NEW_VER})"

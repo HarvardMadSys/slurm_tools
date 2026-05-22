@@ -237,18 +237,12 @@ Total Memory: 13357.5 MB
 
 This script complements the existing SLURM tools in your toolkit:
 
-- **`print_alloc.py`**: Shows available resources across nodes
-- **`best_partition.py`**: Finds optimal partition for job submission  
-- **`node_monitor.py`**: Monitors actual resource usage of running jobs
+- **`print_alloc`**: Shows available resources across nodes
+- **`best_partition`**: Finds optimal partition for job submission
+- **`node_monitor`**: Monitors actual resource usage of running jobs
 
-Use them together for complete cluster resource management:
 ```bash
-# 1. Find best partition for new job
-./best_partition.py --cpu 16 --mem 256 --gpu 1
-
-# 2. Submit job to recommended partition
+best_partition --cpu 16 --mem 256 --gpu 1
 sbatch -p recommended_partition job.sbatch
-
-# 3. Monitor resource usage of running job
-./node_monitor.py --job-id <job_id>
+node_monitor --job-id <job_id>
 ``` 

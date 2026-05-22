@@ -164,32 +164,16 @@ else
   ohai "Installing commands into ${DEST}"
 fi
 
-install_cmd() {
-  local name="$1"
-  shift
-  local candidate
-  for candidate in "$@"; do
-    if [[ -f "${TOOL_ROOT}/${candidate}" ]]; then
-      link_one "${TOOL_ROOT}/${candidate}" "$name"
-      return 0
-    fi
-  done
-  warn "Skipping ${name}: none of ($*) found in ${TOOL_ROOT}"
-}
-
 if ! $DRY; then
-  chmod +x "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" 2>/dev/null || true
-  for f in "${TOOL_ROOT}/best_partition" "${TOOL_ROOT}/best_partition.py" \
-    "${TOOL_ROOT}/print_alloc" "${TOOL_ROOT}/print_alloc.py" \
-    "${TOOL_ROOT}/dep/node_monitor.py"; do
-    [[ -f "$f" ]] && chmod +x "$f"
-  done
+  chmod +x "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
+    "${TOOL_ROOT}/best_partition.sh" "${TOOL_ROOT}/print_alloc.sh" \
+    "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
 fi
 
-install_cmd best_partition best_partition best_partition.py
-install_cmd print_alloc print_alloc print_alloc.py
-install_cmd node_monitor dep/node_monitor.py
-install_cmd slurm-alloc alloc.sh
+link_one "${TOOL_ROOT}/best_partition.sh" "best_partition"
+link_one "${TOOL_ROOT}/print_alloc.sh" "print_alloc"
+link_one "${TOOL_ROOT}/dep/node_monitor.py" "node_monitor"
+link_one "${TOOL_ROOT}/alloc.sh" "slurm-alloc"
 link_one "${TOOL_ROOT}/upgrade.sh" "slurm-tools-upgrade"
 
 shell_base="$(basename "${SHELL:-bash}")"

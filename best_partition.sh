@@ -44,9 +44,7 @@ done
 HAVE_AVAIL=1; [[ "$TOTAL_RES" == "1" ]] && HAVE_AVAIL=0
 
 if [[ "$SUMMARY" != "1" ]]; then
-  if [[ "$NAMEONLY" == "1" ]]; then :; else
-    [[ -n "${CPU:-}" && -n "${MEM:-}" ]] || abort "Error: --cpu and --mem are required unless using --summary"
-  fi
+  [[ -n "${CPU:-}" && -n "${MEM:-}" ]] || abort "Error: --cpu and --mem are required unless using --summary"
 fi
 
 nodes_line_for_partition() {
@@ -257,8 +255,6 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am a
     bt="$(lc "$blob")"; gm="$(lc "$GPUMEM")"; [[ "$bt" == *"${gm}"* ]] || continue
   fi
 
-  chk_c="$ac"; chk_m="$ag"; chk_g="$ag"; # bug - fix below
-
   chk_c="$ac"
   chk_m="$am"
   chk_g="$ag"
@@ -287,7 +283,7 @@ done <"$ENR"
 
 if [[ ! -s "$CANDS" ]]; then
   [[ "$NAMEONLY" == "1" ]] || quiet "No suitable partitions found for your requirements."
-  exit 0
+  exit 1
 fi
 
 SORTED="$(mktemp)"
@@ -319,11 +315,16 @@ if [[ "$JSON_OUT" == "1" ]]; then
     bj="$(json_escape "$blob")"
     tmem_gb=$(( (tmem + 512) / 1024 ))
     avail_json=""
-    [[ "$HAVE_AVAIL" == "1" ]] && avail_json="$(printf '%s',\n      \"available_cpus\": %s,\n      \"available_memory_gb\": %s,\n      \"available_gpus\": %s" "," "$ac" "$(( (am + 512) / 1024 ))" "$ag")"
+    if [[ "$HAVE_AVAIL" == "1" ]]; then
+      avail_json=$(printf ',
+      "available_cpus": %s,
+      "available_memory_gb": %s,
+      "available_gpus": %s' "$ac" "$(( (am + 512) / 1024 ))" "$ag")
+    fi
     # shellcheck disable=SC2086
     printf \
-      '  {\n    "name": "%s",\n    "cost": %s,\n    "max_time": "%s",\n    "priority_tier": %s,\n    "billing_weights": {"CPU": %s, "Mem": %s, "Gres/gpu": %s},\n    "total_cpus": %s,\n    "total_memory_gb": %s,\n    "total_gpus": %s,%s,\n    "gpu_blob": "%s"\n  }' \
-      "$nmj" "$cost" "$mj" "$prio" "$wc" "$wm" "$wgg" "$tcpus" "$tmem_gb" "$tgpu" "${avail_json:-}" "$bj"
+      '  {\n    "name": "%s",\n    "cost": %s,\n    "max_time": "%s",\n    "priority_tier": %s,\n    "billing_weights": {"CPU": %s, "Mem": %s, "Gres/gpu": %s},\n    "total_cpus": %s,\n    "total_memory_gb": %s,\n    "total_gpus": %s%s,\n    "gpu_blob": "%s"\n  }' \
+      "$nmj" "$cost" "$mj" "$prio" "$wc" "$wm" "$wgg" "$tcpus" "$tmem_gb" "$tgpu" "$avail_json" "$bj"
   done <"$SORTED"
   printf '\n]\n'
   exit 0

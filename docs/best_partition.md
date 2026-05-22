@@ -1,6 +1,6 @@
 # SLURM Partition Optimizer
 
-This Python script analyzes SLURM partition `TRESBillingWeights` and recommends the best partition to use based on your resource requirements.
+This tool analyzes SLURM partition `TRESBillingWeights` and recommends the best partition to use based on your resource requirements.
 
 **By default, it uses available (unallocated) resources for more realistic recommendations.** Use `--total-resources` to use total partition capacity instead.
 
@@ -16,49 +16,48 @@ This Python script analyzes SLURM partition `TRESBillingWeights` and recommends 
 
 ## Requirements
 
-- Python 3.6+
-- SLURM environment with `scontrol` command available
+- Bash and `scontrol`
 
 ## Usage
 
 ### Basic usage for CPU/Memory job (uses available resources by default):
 ```bash
-python3 best_partition.py --cpu 4 --mem 8
+best_partition --cpu 4 --mem 8
 ```
 
 ### For GPU jobs (uses available resources by default):
 ```bash
-python3 best_partition.py --cpu 8 --mem 16 --gpu 1
+best_partition --cpu 8 --mem 16 --gpu 1
 ```
 
 ### With time limit:
 ```bash
-python3 best_partition.py --cpu 4 --mem 8 --time 96
+best_partition --cpu 4 --mem 8 --time 96
 ```
 
 ### Show summary of all partitions (shows available resources by default):
 ```bash
-python3 best_partition.py --summary
+best_partition --summary
 ```
 
 ### Use total resources instead of available resources:
 ```bash
-python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --total-resources
+best_partition --cpu 4 --mem 8 --gpu 1 --total-resources
 ```
 
 ### Show summary with total resources:
 ```bash
-python3 best_partition.py --summary --total-resources
+best_partition --summary --total-resources
 ```
 
 ### JSON output (includes available resources by default):
 ```bash
-python3 best_partition.py --cpu 4 --mem 8 --json
+best_partition --cpu 4 --mem 8 --json
 ```
 
 ### JSON output with total resources:
 ```bash
-python3 best_partition.py --cpu 4 --mem 8 --total-resources --json
+best_partition --cpu 4 --mem 8 --total-resources --json
 ```
 
 ## Command-line Arguments
@@ -83,10 +82,10 @@ Filter partitions by GPU type (e.g., A100, H100, V100):
 
 ```bash
 # Find partitions with A100 GPUs
-python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
 
 # Find partitions with H100 GPUs
-python3 best_partition.py --cpu 4 --mem 8 --gpu 2 --gpu-type h100
+best_partition --cpu 4 --mem 8 --gpu 2 --gpu-type h100
 ```
 
 ### GPU Memory Filtering
@@ -95,10 +94,10 @@ Filter partitions by GPU memory size:
 
 ```bash
 # Find partitions with 80GB GPUs
-python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
 
 # Find partitions with 40GB GPUs
-python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
+best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
 ```
 
 ### Combined GPU Filtering
@@ -107,7 +106,7 @@ Combine both GPU type and memory filtering:
 
 ```bash
 # Find partitions with A100 80GB GPUs specifically
-python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
+best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 ```
 
 ### GPU Information in Summary
@@ -115,7 +114,7 @@ python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 8
 The summary mode now shows GPU type and memory information:
 
 ```bash
-python3 best_partition.py --summary
+best_partition --summary
 ```
 
 This will display GPU Type and GPU Memory columns showing the GPU specifications for each partition.
@@ -156,7 +155,7 @@ This will display GPU Type and GPU Memory columns showing the GPU specifications
 
 ### Basic Usage (Available Resources - Default)
 ```bash
-$ python3 best_partition.py --cpu 4 --mem 8 --gpu 1
+$ best_partition --cpu 4 --mem 8 --gpu 1
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -182,7 +181,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 
 ### GPU Type Filtering
 ```bash
-$ python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+$ best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -205,7 +204,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 
 ### GPU Memory Filtering
 ```bash
-$ python3 best_partition.py --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+$ best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -222,7 +221,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 
 ### Summary with GPU Information
 ```bash
-$ python3 best_partition.py --summary
+$ best_partition --summary
 
 Partition            CPU Weight Mem Weight GPU Weight Max Time        State    Avail CPUs      Avail Mem(GB)   Avail GPUs      GPU Type        GPU Memory
 ------------------------------------------------------------------------------------------------------------------------------------
