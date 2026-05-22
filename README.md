@@ -1,4 +1,4 @@
-# slurm_tools
+# Slurm tools
 
 Small utilities for working with SLURM: picking a partition from billing weights, submitting allocation-style jobs, printing free resources on GPU nodes, and inspecting processes on job nodes.
 
@@ -36,7 +36,25 @@ To preview without applying changes, run `install.sh --dry-run` (from a clone as
 ./install.sh --dry-run
 ```
 
-Commands added: `best_partition`, `print_alloc`, `node_monitor`, `slurm-alloc` (symlink to `alloc.sh`). Reload your shell or `source ~/.zshrc` (or the file the script reported).
+Commands added: `best_partition`, `print_alloc`, `node_monitor`, `slurm-alloc` (symlink to `alloc.sh`), `slurm-tools-upgrade`. Reload your shell or `source ~/.zshrc` (or the file the script reported).
+
+## Upgrade
+
+Installed version is stored in `VERSION` at the install root (e.g. `~/.local/share/slurm_tools/VERSION`). To compare with [GitHub `main`](https://github.com/HarvardMadSys/slurm_tools) and upgrade:
+
+```bash
+slurm-tools-upgrade --check    # exit 1 if a newer version is available
+slurm-tools-upgrade            # interactive upgrade
+slurm-tools-upgrade -y         # upgrade without prompting
+slurm-tools-upgrade --dry-run  # preview steps
+slurm-tools-upgrade --version  # print installed version
+```
+
+Override install location or branch:
+
+```bash
+SLURM_TOOLS_ROOT=~/.local/share/slurm_tools SLURM_TOOLS_BRANCH=main slurm-tools-upgrade -y
+```
 
 If your default shell differs from the one you use in the terminal, add to that rc file manually:
 
