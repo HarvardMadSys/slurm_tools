@@ -96,7 +96,7 @@ resolve_install_root() {
     return 0
   fi
 
-  for cand in best_partition print_alloc slurm-alloc node_monitor slurm-tools-upgrade; do
+  for cand in best_partition print_alloc slurm-alloc slurm-submit node_monitor slurm-tools-upgrade; do
     link="${HOME}/.local/bin/${cand}"
     [[ -e "$link" ]] || continue
     if [[ -L "$link" ]]; then

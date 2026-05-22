@@ -166,14 +166,15 @@ fi
 
 if ! $DRY; then
   chmod +x "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
-    "${TOOL_ROOT}/best_partition.sh" "${TOOL_ROOT}/print_alloc.sh" \
-    "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
+    "${TOOL_ROOT}/submit_job.sh" "${TOOL_ROOT}/best_partition.sh" \
+    "${TOOL_ROOT}/print_alloc.sh" "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
 fi
 
 link_one "${TOOL_ROOT}/best_partition.sh" "best_partition"
 link_one "${TOOL_ROOT}/print_alloc.sh" "print_alloc"
 link_one "${TOOL_ROOT}/dep/node_monitor.py" "node_monitor"
 link_one "${TOOL_ROOT}/alloc.sh" "slurm-alloc"
+link_one "${TOOL_ROOT}/submit_job.sh" "slurm-submit"
 link_one "${TOOL_ROOT}/upgrade.sh" "slurm-tools-upgrade"
 
 shell_base="$(basename "${SHELL:-bash}")"
@@ -218,6 +219,6 @@ else
   ohai "Next steps:"
   ver="$(read_version)"
   printf -- "- Version: %s (check upgrades: slurm-tools-upgrade --check)\n" "$ver"
-  printf -- "- Commands: best_partition, print_alloc, node_monitor, slurm-alloc, slurm-tools-upgrade → %s\n" "$DEST"
+  printf -- "- Commands: best_partition, print_alloc, node_monitor, slurm-alloc, slurm-submit, slurm-tools-upgrade → %s\n" "$DEST"
   printf '%s\n' '- Restart the shell or `source` your rc file so PATH updates.'
 fi

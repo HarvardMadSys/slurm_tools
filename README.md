@@ -23,7 +23,7 @@ mkdir -p ~/.local/share/slurm_tools && curl -fsSL https://codeload.github.com/Ha
 ./install.sh --dry-run   # preview only
 ```
 
-Adds to `~/.local/bin`: `best_partition`, `print_alloc`, `node_monitor`, `slurm-alloc`, `slurm-tools-upgrade`. Reload your shell or `source` the rc file `install.sh` updated.
+Adds to `~/.local/bin`: `best_partition`, `print_alloc`, `node_monitor`, `slurm-alloc`, `slurm-submit`, `slurm-tools-upgrade`. Reload your shell or `source` the rc file `install.sh` updated.
 
 ```bash
 best_partition --cpu 4 --mem 8
@@ -47,6 +47,7 @@ Version is stored in `VERSION` at the install root. See `slurm-tools-upgrade --h
 | `best_partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
 | `print_alloc` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
 | `slurm-alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `best_partition` when `-p best` |
+| `slurm-submit` | `submit_job.sh` | Submit your batch script with the same flags; prints job ID |
 | `node_monitor` | `dep/node_monitor.py` | SSH to job nodes and show your processes |
 | `slurm-tools-upgrade` | `upgrade.sh` | Pull updates from GitHub |
 
@@ -59,6 +60,7 @@ print_alloc -p gpu_requeue
 print_alloc -p gpu_requeue -a                          # include CPU load / used memory
 node_monitor --job-id 12345
 slurm-alloc -c 16 -m 256 -g 1 -u h100                  # site-specific; see below
+slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
 ```
 
 ## Docs
@@ -68,6 +70,7 @@ slurm-alloc -c 16 -m 256 -g 1 -u h100                  # site-specific; see belo
 | `best_partition` | [docs/best_partition.md](docs/best_partition.md) |
 | `print_alloc` | [docs/print_alloc.md](docs/print_alloc.md) |
 | `slurm-alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
+| `slurm-submit` | [docs/submit_job.md](docs/submit_job.md) |
 | `node_monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
 
 ## Notes on `slurm-alloc`
