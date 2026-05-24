@@ -167,7 +167,8 @@ fi
 if ! $DRY; then
   chmod +x "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
     "${TOOL_ROOT}/submit_job.sh" "${TOOL_ROOT}/best_partition.sh" \
-    "${TOOL_ROOT}/print_alloc.sh" "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
+    "${TOOL_ROOT}/print_alloc.sh" "${TOOL_ROOT}/lib/slurm_common.sh" \
+    "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
 fi
 
 link_one "${TOOL_ROOT}/best_partition.sh" "best_partition"

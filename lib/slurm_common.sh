@@ -1,0 +1,218 @@
+# Shared helpers for slurm-alloc / slurm-submit. Source from repo scripts only.
+# Site overrides (optional):
+#   SLURM_TOOLS_ALLOC_SCRIPT      Batch script for slurm-alloc placeholder job
+#   SLURM_TOOLS_MIG_PARTITION     Partition for a100mig (default: gpu_test)
+#   SLURM_TOOLS_SKIP_UPGRADE      Set to 1 to disable auto-upgrade
+#   SLURM_TOOLS_FORCE_UPGRADE_CHECK  Set to 1 to force version check
+
+slurm_tools_read_version() {
+  local root="${SLURM_TOOLS_SCRIPT_DIR:-}"
+  if [[ -f "${root}/VERSION" ]]; then
+    tr -d '[:space:]' <"${root}/VERSION" | head -n1
+  else
+    printf "unknown"
+  fi
+}
+
+slurm_tools_print_log() {
+  printf '%s %s\n' "$(date +%Y-%m-%d\ %H:%M:%S)" "$*"
+}
+
+slurm_tools_wants_skip_upgrade() {
+  [[ "${SLURM_TOOLS_SKIP_UPGRADE:-}" == "1" ]] && return 0
+  local a
+  for a in "$@"; do
+    case "$a" in
+      -v | -h | --help) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+slurm_tools_maybe_auto_upgrade() {
+  local root="${SLURM_TOOLS_SCRIPT_DIR:-}" up rc cache_dir cache_file now last
+
+  slurm_tools_wants_skip_upgrade "$@" && return 0
+
+  up="${root}/upgrade.sh"
+  [[ -f "$up" ]] || return 0
+
+  cache_dir="${HOME}/.cache/slurm_tools"
+  cache_file="${cache_dir}/last_version_check"
+  now="$(date +%s)"
+  if [[ "${SLURM_TOOLS_FORCE_UPGRADE_CHECK:-}" != "1" && -f "$cache_file" ]]; then
+    last="$(tr -d '[:space:]' <"$cache_file")"
+    if [[ -n "$last" && $((now - last)) -lt 86400 ]]; then
+      return 0
+    fi
+  fi
+  rc=0
+  SLURM_TOOLS_ROOT="$root" bash "$up" --check --quiet || rc=$?
+  if [[ "$rc" -eq 0 || "$rc" -eq 1 ]]; then
+    mkdir -p "$cache_dir"
+    printf '%s\n' "$now" >"$cache_file"
+  fi
+  if [[ "$rc" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$rc" -eq 2 ]]; then
+    slurm_tools_print_log "version check failed (offline?); continuing with ${SLURM_TOOLS_VERSION:-unknown}"
+    return 0
+  fi
+  if [[ "$rc" -ne 1 ]]; then
+    return 0
+  fi
+
+  slurm_tools_print_log "new slurm_tools release available; upgrading ${SLURM_TOOLS_VERSION:-unknown}..."
+  if ! SLURM_TOOLS_ROOT="$root" bash "$up" -y --quiet; then
+    slurm_tools_print_log "upgrade failed; continuing with ${SLURM_TOOLS_VERSION:-unknown}"
+    return 0
+  fi
+
+  SLURM_TOOLS_VERSION="$(slurm_tools_read_version)"
+  slurm_tools_print_log "upgraded to ${SLURM_TOOLS_VERSION}; restarting"
+  exec "$0" "$@"
+}
+
+slurm_tools_timeout_string() {
+  local hours="$1"
+  if [[ "$hours" -gt 23 ]]; then
+    printf '%d-%d:00:00' $((hours / 24)) $((hours % 24))
+  else
+    printf '%d:00:00' "$hours"
+  fi
+}
+
+slurm_tools_default_job_name() {
+  local gpu_count="$1" gpu_type="$2"
+  if [[ "$gpu_count" -eq 0 ]]; then
+    whoami
+  else
+    printf '%s%s' "$gpu_count" "$gpu_type"
+  fi
+}
+
+# Map short GPU name to SLURM gres type; prints full name to stdout or returns 1.
+slurm_tools_map_gpu_type() {
+  case "$1" in
+    h100) printf '%s' "nvidia_h100_80gb_hbm3" ;;
+    h200) printf '%s' "nvidia_h200" ;;
+    a100 | a100-80gb) printf '%s' "nvidia_a100-sxm4-80gb" ;;
+    a100-40gb) printf '%s' "nvidia_a100-sxm4-40gb" ;;
+    a40) printf '%s' "nvidia_a40" ;;
+    a100mig) printf '%s' "nvidia_a100_3g.20gb" ;;
+    *) return 1 ;;
+  esac
+}
+
+slurm_tools_gpu_types_help() {
+  printf '%s' "h100, h200, a100, a100-80gb, a100-40gb, a40, a100mig"
+}
+
+slurm_tools_build_gres_args() {
+  local short_type="$1" count="$2" full
+  GRES_ARGS=()
+  [[ "$count" -gt 0 ]] || return 0
+  if ! full="$(slurm_tools_map_gpu_type "$short_type")"; then
+    return 1
+  fi
+  GRES_ARGS=(--gres=gpu:"${full}":"${count}")
+}
+
+slurm_tools_resolve_partition() {
+  # args: partition cpu mem gpu_count gpu_type timeout [node_count]
+  local partition="$1" cpu="$2" mem="$3" gpu_count="$4" gpu_type="$5" timeout="$6"
+  local nodes="${7:-1}"
+  local mig_part="${SLURM_TOOLS_MIG_PARTITION:-gpu_test}"
+
+  [[ "$partition" != "best" ]] && { printf '%s' "$partition"; return 0; }
+
+  # Scale to total resources across all nodes so best_partition can filter correctly.
+  local total_cpu=$(( cpu * nodes ))
+  local total_mem=$(( mem * nodes ))
+  local total_gpu=$(( gpu_count * nodes ))
+
+  if [[ "$total_gpu" -gt 0 ]]; then
+    if [[ "$gpu_type" == "a100mig" ]]; then
+      printf '%s' "$mig_part"
+      return 0
+    fi
+    best_partition -n -c "$total_cpu" -m "$total_mem" --gpu-type "$gpu_type" -g "$total_gpu" -t "$timeout"
+  else
+    best_partition -n -c "$total_cpu" -m "$total_mem" -t "$timeout"
+  fi
+}
+
+# Submit via sbatch; sets SLURM_TOOLS_JOB_ID on success.
+slurm_tools_sbatch() {
+  local out rc
+  mkdir -p logs
+  out="$(sbatch "$@" 2>&1)"
+  rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    printf '%s\n' "$out" >&2
+    return "$rc"
+  fi
+  SLURM_TOOLS_JOB_ID="$(printf '%s' "$out" | awk '/Submitted batch job/ {print $4; exit}')"
+  if [[ -z "${SLURM_TOOLS_JOB_ID:-}" ]]; then
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  printf '%s\n' "$out"
+  return 0
+}
+
+slurm_tools_job_state() {
+  local jid="$1"
+  scontrol show job "$jid" 2>/dev/null | awk -F= '/JobState=/{print $2; exit}' | awk '{print $1}'
+}
+
+slurm_tools_job_nodelist() {
+  local jid="$1"
+  scontrol show job "$jid" 2>/dev/null | awk -F= '/NodeList=/{print $2; exit}' | awk '{print $1}'
+}
+
+# Wait until job is RUNNING with a valid NodeList, then record nodes.
+# ~/.alloc/<job_name> receives the SLURM NodeList string (e.g. node[01-04]).
+slurm_tools_wait_for_allocation() {
+  local jid="$1" job_name="$2"
+  local state nodelist first_node
+
+  while true; do
+    state="$(slurm_tools_job_state "$jid")"
+    case "$state" in
+      COMPLETED | FAILED | CANCELLED | TIMEOUT | NODE_FAIL | PREEMPTED | OUT_OF_MEMORY | BOOT_FAIL | DEADLINE)
+        slurm_tools_print_log "job ${jid} ended with state ${state}"
+        return 1
+        ;;
+      RUNNING | COMPLETING)
+        nodelist="$(slurm_tools_job_nodelist "$jid")"
+        # Derive first plain hostname to check validity.
+        first_node="${nodelist%%,*}"
+        first_node="${first_node%%\[*}"
+        if [[ -n "$first_node" && "$first_node" != "(null)" && "$first_node" != "None" ]]; then
+          slurm_tools_print_log "successfully allocated job_id ${jid} on ${nodelist}"
+          mkdir -p "${HOME}/.alloc"
+          printf '%s\n' "$nodelist" >"${HOME}/.alloc/${job_name}"
+          return 0
+        fi
+        ;;
+      "")
+        if ! squeue -h -j "$jid" 2>/dev/null | grep -q .; then
+          slurm_tools_print_log "job ${jid} no longer in queue (state unknown)"
+          return 1
+        fi
+        ;;
+    esac
+    printf '.'
+    sleep 5
+  done
+}
+
+slurm_tools_alloc_script() {
+  if [[ -n "${SLURM_TOOLS_ALLOC_SCRIPT:-}" ]]; then
+    printf '%s' "$SLURM_TOOLS_ALLOC_SCRIPT"
+    return 0
+  fi
+  printf '%s' "/n/holylabs/juncheng_lab/Lab/software/scripts/sleep.sh"
+}

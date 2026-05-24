@@ -71,6 +71,7 @@ best_partition --cpu 4 --mem 8 --total-resources --json
 - `--total-resources`: Use total resources instead of available resources for filtering and display (optional)
 - `--gpu-type`: Filter by GPU type (e.g., a100, h100, v100) (optional)
 - `--gpu-memory`: Filter by GPU memory (e.g., 80gb, 40gb) (optional)
+- `--name-only`, `-n`: Print only the best partition name (for scripts)
 
 ## GPU Filtering
 
@@ -109,15 +110,22 @@ Combine both GPU type and memory filtering:
 best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 ```
 
-### GPU Information in Summary
+### GPU information in summary
 
-The summary mode now shows GPU type and memory information:
+Summary mode includes a **GPUInfo** column (lowercased Gres strings aggregated from nodes):
 
 ```bash
 best_partition --summary
 ```
 
-This will display GPU Type and GPU Memory columns showing the GPU specifications for each partition.
+Use `--gpu-type` / `--gpu-memory` to filter recommendations by substring match against that blob.
+
+### Partition skip lists (site-specific)
+
+Override defaults with environment variables (space-separated partition names):
+
+- `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` (default: `serial_requeue`)
+- `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` (default: `gpu_requeue gpu_test`)
 
 ## How It Works
 
@@ -168,14 +176,14 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 2    serial_requeue       107.600    3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
 3    gpu_requeue          107.600    3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
 
-🎯 Best recommendation: gpu_test
+Best recommendation: gpu_test
    Cost: 0.000 billing units
    Max time: 12:00:00
    Priority tier: 4
    Billing weights: {'CPU': 0.0, 'Mem': 0.0, 'Gres/gpu': 0.0}
    Available resources: 605 CPUs, 4081.8 GB RAM, 82 GPUs (a100)
 
-📋 Suggested sbatch command:
+Suggested sbatch command:
    sbatch --partition=gpu_test --cpus-per-task=4 --mem=8G --gres=gpu:1 your_script.sh
 ```
 
@@ -194,7 +202,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 1    gpu_test             0.000      12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
 2    gpu                  214.260    3-00:00:00      3        162 CPUs, 15745 GB, 6 GPUs (a100)
 
-🎯 Best recommendation: gpu_test
+Best recommendation: gpu_test
    Cost: 0.000 billing units
    Max time: 12:00:00
    Priority tier: 4
@@ -223,12 +231,10 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 ```bash
 $ best_partition --summary
 
-Partition            CPU Weight Mem Weight GPU Weight Max Time        State    Avail CPUs      Avail Mem(GB)   Avail GPUs      GPU Type        GPU Memory
-------------------------------------------------------------------------------------------------------------------------------------
-gpu_test             0.000      0.000      0.000      12:00:00        UP       605             4081.8          82              a100            N/A
-gpu                  1.150      0.070      209.100    3-00:00:00      UP       162             15745.5         6               a100            N/A
-gpu_requeue          0.500      0.125      104.600    3-00:00:00      UP       5861            162233.3        276             N/A             80gb
-seas_gpu             0.900      0.060      333.200    7-00:00:00      UP       1299            27983.5         22              N/A             80gb
+Partition            CPU Wt     Mem Wt     GPU Wt     Max Time        State    AvailCPU AvailMemGB AvailGPU GPUInfo
+---------------------------------------------------------------------------------------------------------------
+gpu_test             0          0          0          12:00:00        UP       605      4081.8     82       a100 ...
+gpu_requeue          0.5        0.125      104.6      3-00:00:00      UP       5861     162233.3   276      ...
 ```
 
 ## Understanding TRESBillingWeights

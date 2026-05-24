@@ -7,12 +7,12 @@ usage() {
   cat <<EOF
 usage: $(basename "$0") [--partition|-p NAME] [--available|-a] [--help|-h]
 
-  -p PARTITION   Partition to query (default: gpu_requeue)
+  -p PARTITION   Partition to query (default: SLURM_TOOLS_DEFAULT_PARTITION or gpu_requeue)
   -a             Include CPULoad and used-memory columns
 EOF
 }
 
-PARTITION="gpu_requeue"
+PARTITION="${SLURM_TOOLS_DEFAULT_PARTITION:-gpu_requeue}"
 SHOW_AVAILABLE="0"
 
 while [[ $# -gt 0 ]]; do
@@ -40,12 +40,8 @@ done
 NODE_LIST=""
 while IFS= read -r line; do
   trimmed="${line#"${line%%[![:space:]]*}"}"
-  [[ "$trimmed" == Nodes=* ]] || [[ "$trimmed" == *Nodes=* ]] || continue
-  if [[ "$trimmed" == Nodes=* ]]; then
-    rest="${trimmed#Nodes=}"
-  else
-    rest="${trimmed#*Nodes=}"
-  fi
+  [[ "$trimmed" == Nodes=* ]] || continue
+  rest="${trimmed#Nodes=}"
   NODE_LIST="${rest%%[![:graph:]]*}"
   NODE_LIST="${NODE_LIST// }"
   break
@@ -63,23 +59,31 @@ scontrol show node "$NODE_LIST" >"$TMP"
 
 tab=$'\t'
 
-if [[ "$SHOW_AVAILABLE" == "1" ]]; then
-  LC_ALL=C awk -v OFS="$tab" '
+LC_ALL=C awk -v OFS="$tab" -v show_avail="$SHOW_AVAILABLE" '
 BEGIN { RS = "\n\n" }
 
-function field(line, key, klen, rest) {
+function val(line, key, klen, pos, rest) {
   klen = length(key)
-  if (substr(line, 1, klen + 1) != key "=") return ""
-  rest = substr(line, klen + 2)
-  sub(/^[[:space:]]+/, "", rest)
+  pos = index(line, key "=")
+  if (pos == 0) return ""
+  rest = substr(line, pos + klen + 1)
   sub(/[[:space:]].*$/, "", rest)
   return rest
 }
 
-function full_after_key(line, key, klen) {
+function val_rest(line, key, klen, pos) {
   klen = length(key)
-  if (substr(line, 1, klen + 1) != key "=") return ""
-  return substr(line, index(line, "=") + 1)
+  pos = index(line, key "=")
+  if (pos == 0) return ""
+  return substr(line, pos + klen + 1)
+}
+
+function gpus_from_gres(g) {
+  if (match(g, /:[0-9]+\(S:/))
+    return substr(g, RSTART + 1, RLENGTH - 4) + 0
+  if (match(g, /:[0-9]+$/))
+    return substr(g, RSTART + 1, RLENGTH - 1) + 0
+  return 0
 }
 
 length($0) == 0 { next }
@@ -91,14 +95,18 @@ length($0) == 0 { next }
   nn = split($0, lines, /\n/)
   for (i = 1; i <= nn; i++) {
     ln = lines[i]; sub(/^[[:space:]]+/, "", ln)
-    if (substr(ln, 1, 10) == "NodeName=") nm = field(ln, "NodeName")
-    else if (substr(ln, 1, 10) == "CPUEfctv=") efctv = field(ln, "CPUEfctv") + 0
-    else if (substr(ln, 1, 9) == "CPULoad=") load_s = field(ln, "CPULoad")
-    else if (substr(ln, 1, 5) == "Gres=") gres = field(ln, "Gres")
-    else if (substr(ln, 1, 13) == "RealMemory=") rm = field(ln, "RealMemory") + 0
-    else if (substr(ln, 1, 8) == "FreeMem=") fm = field(ln, "FreeMem") + 0
-    else if (substr(ln, 1, 7) == "State=") st = field(ln, "State")
-    else if (substr(ln, 1, 11) == "AllocTRES=") alc = full_after_key(ln, "AllocTRES")
+    v = val(ln, "NodeName"); if (v != "") nm = v
+    v = val(ln, "CPUEfctv"); if (v != "") efctv = v + 0
+    if (show_avail) {
+      v = val(ln, "CPULoad"); if (v != "") load_s = v
+    }
+    v = val(ln, "Gres"); if (v != "") gres = v
+    v = val(ln, "RealMemory"); if (v != "") rm = v + 0
+    if (show_avail) {
+      v = val(ln, "FreeMem"); if (v != "") fm = v + 0
+    }
+    v = val(ln, "State"); if (v != "") st = v
+    if (index(ln, "AllocTRES=") > 0) alc = val_rest(ln, "AllocTRES")
   }
 
   if (nm == "") next
@@ -122,106 +130,42 @@ length($0) == 0 { next }
     }
   }
 
-  gpu_total = 0
-  if (gres ~ /nvidia/ && match(gres, /:[0-9]+$/))
-    gpu_total = substr(gres, RSTART + 1, RLENGTH - 1) + 0
-
+  gpu_total = gpus_from_gres(gres)
   ugpu = gpu_total - ag
   ucpu = efctv - ac
   mem_gb_u = (rm - amb) / 1024
-  used_gb = (rm - fm) / 1024
-  load_v = load_s + 0
-
   cg = gres; sub(/^gpu:/, "", cg); gsub(/\([^)]*\)/, "", cg)
 
-  printf "%d\t%d\t%.6f\t%s\t%d\t%d\t%.1f\t%.1f\t%.1f\t%s\t%s\t%s\n",
-    ugpu, ucpu, used_gb, nm, ugpu, ucpu, mem_gb_u, load_v, used_gb, cg, st, alc
+  if (show_avail) {
+    used_gb = (rm - fm) / 1024
+    load_v = load_s + 0
+    printf "%d\t%d\t%.6f\t%s\t%d\t%d\t%.1f\t%.1f\t%.1f\t%s\t%s\t%s\n",
+      ugpu, ucpu, used_gb, nm, ugpu, ucpu, mem_gb_u, load_v, used_gb, cg, st, alc
+  } else {
+    printf "%d\t%d\t%.6f\t%s\t%d\t%d\t%.1f\t%s\t%s\t%s\n",
+      ugpu, ucpu, mem_gb_u, nm, ugpu, ucpu, mem_gb_u, cg, st, alc
+  }
 }
-' "$TMP" | LC_ALL=C sort -t "$tab" -k1,1nr -k2,2nr -k3,3n | awk -F "$tab" 'BEGIN {
-  printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n",
-    "NodeName", "UnallocGPU", "UnallocCPU", "UnallocMem(GB)", "CPULoad", "UsedMem(GB)", "Gres", "State", "AllocTRES")
-  printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n",
-    "--------", "----------", "----------", "--------------", "--------", "-----------", "-------------------------",
-    "---------------", "-----------")
+' "$TMP" | LC_ALL=C sort -t "$tab" -k1,1nr -k2,2nr -k3,3n | awk -F "$tab" -v show_avail="$SHOW_AVAILABLE" '
+BEGIN {
+  if (show_avail) {
+    printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n",
+      "NodeName", "UnallocGPU", "UnallocCPU", "UnallocMem(GB)", "CPULoad", "UsedMem(GB)", "Gres", "State", "AllocTRES")
+    printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n",
+      "--------", "----------", "----------", "--------------", "--------", "-----------", "-------------------------",
+      "---------------", "-----------")
+  } else {
+    printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n",
+      "NodeName", "UnallocGPU", "UnallocCPU", "UnallocMem(GB)", "Gres", "State", "AllocTRES")
+    printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n",
+      "--------", "----------", "----------", "--------------", "-------------------------",
+      "---------------", "-----------")
+  }
 }
-{ printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n", $4, $5, $6, $7, $8, $9, $10, $11, $12) }'
-else
-  LC_ALL=C awk -v OFS="$tab" '
-BEGIN { RS = "\n\n" }
-
-function field(line, key, klen, rest) {
-  klen = length(key)
-  if (substr(line, 1, klen + 1) != key "=") return ""
-  rest = substr(line, klen + 2)
-  sub(/^[[:space:]]+/, "", rest)
-  sub(/[[:space:]].*$/, "", rest)
-  return rest
+show_avail {
+  printf("%-20s %-10s %-10s %-14s %-8s %-11s %-25s %-15s %s\n", $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  next
 }
-
-function full_after_key(line, key, klen) {
-  klen = length(key)
-  if (substr(line, 1, klen + 1) != key "=") return ""
-  return substr(line, index(line, "=") + 1)
-}
-
-length($0) == 0 { next }
-
 {
-  nm = ""; st = ""; gres = ""; alc = ""
-  efctv = rm = fm = 0
-
-  nn = split($0, lines, /\n/)
-  for (i = 1; i <= nn; i++) {
-    ln = lines[i]; sub(/^[[:space:]]+/, "", ln)
-    if (substr(ln, 1, 10) == "NodeName=") nm = field(ln, "NodeName")
-    else if (substr(ln, 1, 10) == "CPUEfctv=") efctv = field(ln, "CPUEfctv") + 0
-    else if (substr(ln, 1, 5) == "Gres=") gres = field(ln, "Gres")
-    else if (substr(ln, 1, 13) == "RealMemory=") rm = field(ln, "RealMemory") + 0
-    else if (substr(ln, 1, 8) == "FreeMem=") fm = field(ln, "FreeMem") + 0
-    else if (substr(ln, 1, 7) == "State=") st = field(ln, "State")
-    else if (substr(ln, 1, 11) == "AllocTRES=") alc = full_after_key(ln, "AllocTRES")
-  }
-
-  if (nm == "") next
-  if (index(st, "DOWN") > 0) next
-
-  ac = ag = amb = 0
-  if (match(alc, /cpu=[0-9]+/)) {
-    x = substr(alc, RSTART, RLENGTH); sub(/^cpu=/, "", x); ac = x + 0
-  }
-  if (match(alc, /gres\/gpu=[0-9]+/)) {
-    x = substr(alc, RSTART, RLENGTH); sub(/^gres\/gpu=/, "", x); ag = x + 0
-  }
-  if (match(alc, /mem=[0-9]+[MG]?/)) {
-    x = substr(alc, RSTART, RLENGTH); sub(/^mem=/, "", x)
-    ut = substr(x, length(x), 1)
-    if (ut == "G" || ut == "M") {
-      vv = substr(x, 1, length(x) - 1) + 0
-      amb = (ut == "G" ? vv * 1024 : vv)
-    } else {
-      amb = x + 0
-    }
-  }
-
-  gpu_total = 0
-  if (gres ~ /nvidia/ && match(gres, /:[0-9]+$/))
-    gpu_total = substr(gres, RSTART + 1, RLENGTH - 1) + 0
-
-  ugpu = gpu_total - ag
-  ucpu = efctv - ac
-  mem_gb_u = (rm - amb) / 1024
-
-  cg = gres; sub(/^gpu:/, "", cg); gsub(/\([^)]*\)/, "", cg)
-
-  printf "%d\t%d\t%.6f\t%s\t%d\t%d\t%.1f\t%s\t%s\t%s\n",
-    ugpu, ucpu, mem_gb_u, nm, ugpu, ucpu, mem_gb_u, cg, st, alc
-}
-' "$TMP" | LC_ALL=C sort -t "$tab" -k1,1nr -k2,2nr -k3,3nr | awk -F "$tab" 'BEGIN {
-  printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n",
-    "NodeName", "UnallocGPU", "UnallocCPU", "UnallocMem(GB)", "Gres", "State", "AllocTRES")
-  printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n",
-    "--------", "----------", "----------", "--------------", "-------------------------",
-    "---------------", "-----------")
-}
-{ printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n", $4, $5, $6, $7, $8, $9, $10) }'
-fi
+  printf("%-20s %-10s %-10s %-14s %-25s %-15s %s\n", $4, $5, $6, $7, $8, $9, $10)
+}'

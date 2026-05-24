@@ -38,7 +38,21 @@ slurm-tools-upgrade --check
 slurm-tools-upgrade -y
 ```
 
-Version is stored in `VERSION` at the install root. See `slurm-tools-upgrade --help` for `SLURM_TOOLS_ROOT`, `SLURM_TOOLS_BRANCH`, and `SLURM_TOOLS_REPO`.
+Version is stored in `VERSION` at the install root. Upgrades replace the install tree (`rsync --delete` when available); a git checkout used as `SLURM_TOOLS_ROOT` may lose `.git`. See `slurm-tools-upgrade --help` for `SLURM_TOOLS_ROOT`, `SLURM_TOOLS_BRANCH`, and `SLURM_TOOLS_REPO`.
+
+## Site configuration
+
+Defaults target a Harvard FASRC-style cluster. Override with environment variables — see [docs/env.md](docs/env.md) for full details.
+
+| Variable | Used by | Default |
+|----------|---------|---------|
+| `SLURM_TOOLS_ALLOC_SCRIPT` | `slurm-alloc` | Harvard lab sleep script |
+| `SLURM_TOOLS_DEFAULT_PARTITION` | `print_alloc` | `gpu_requeue` |
+| `SLURM_TOOLS_MIG_PARTITION` | `slurm-alloc`, `slurm-submit` | `gpu_test` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `best_partition` | `serial_requeue` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `best_partition` | `gpu_requeue gpu_test` |
+| `SLURM_TOOLS_SKIP_UPGRADE` | `slurm-alloc`, `slurm-submit` | unset |
+| `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | `slurm-alloc`, `slurm-submit` | unset |
 
 ## Tools
 
@@ -59,7 +73,8 @@ best_partition -n -c 4 -m 8 --gpu 1 --gpu-type h100   # partition name only
 print_alloc -p gpu_requeue
 print_alloc -p gpu_requeue -a                          # include CPU load / used memory
 node_monitor --job-id 12345
-slurm-alloc -c 16 -m 256 -g 1 -u h100                  # site-specific; see below
+node_monitor --job-id 12345 --json | jq .              # progress on stderr
+slurm-alloc -c 16 -m 256 -g 1 -u h100
 slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
 ```
 
@@ -72,9 +87,10 @@ slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
 | `slurm-alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
 | `slurm-submit` | [docs/submit_job.md](docs/submit_job.md) |
 | `node_monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
+| environment variables | [docs/env.md](docs/env.md) |
 
 ## Notes on `slurm-alloc`
 
-`alloc.sh` contains cluster-specific paths (sleep script, log dirs, node name checks). Edit before use on another site.
+`alloc.sh` uses a cluster-specific default for the placeholder sleep script. Set `SLURM_TOOLS_ALLOC_SCRIPT` on other sites.
 
 On each run, `slurm-alloc` may auto-upgrade from GitHub (at most once per 24h). Disable with `SLURM_TOOLS_SKIP_UPGRADE=1`; force a check with `SLURM_TOOLS_FORCE_UPGRADE_CHECK=1`.

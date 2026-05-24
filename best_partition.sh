@@ -51,8 +51,9 @@ nodes_line_for_partition() {
   local trimmed rest
   while IFS= read -r line; do
     trimmed="${line#"${line%%[![:space:]]*}"}"
-    [[ "$trimmed" == Nodes=* ]] || [[ "$trimmed" == *Nodes=* ]] || continue
-    if [[ "$trimmed" == Nodes=* ]]; then rest="${trimmed#Nodes=}"; else rest="${trimmed#*Nodes=}"; fi
+    # Must be Nodes=, not AllocNodes= (substring match caused NODE_LIST=ALL).
+    [[ "$trimmed" == Nodes=* ]] || continue
+    rest="${trimmed#Nodes=}"
     printf "%s\n" "${rest%%[![:graph:]]*}"; return 0
   done < <(scontrol show partition "$1")
   return 1
@@ -244,9 +245,15 @@ need_time=0; [[ -n "${TIME:-}" ]] && need_time=1
 : >"$CANDS"
 while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am ag blob; do
   [[ "$st" == "UP" ]] || continue
-  if [[ "$req_gpu" -gt 0 && "$nm" == "serial_requeue" ]]; then continue; fi
-  if [[ "$req_gpu" == "0" && "$nm" == "gpu_requeue" ]]; then continue; fi
-  if [[ "$req_gpu" == "0" && "$nm" == "gpu_test" ]]; then continue; fi
+  if [[ "$req_gpu" -gt 0 ]]; then
+    for skip in ${SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB:-serial_requeue}; do
+      [[ "$nm" == "$skip" ]] && continue 2
+    done
+  else
+    for skip in ${SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB:-gpu_requeue gpu_test}; do
+      [[ "$nm" == "$skip" ]] && continue 2
+    done
+  fi
 
   if [[ -n "$GPUTYPE" ]]; then
     bt="$(lc "$blob")"; gt="$(lc "$GPUTYPE")"; [[ "$bt" == *"${gt}"* ]] || continue
@@ -264,10 +271,9 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am a
     chk_g="$tgpu"
   fi
 
-  if [[ "$req_cpu" -gt "$chk_c" && "$chk_c" -gt 0 ]]; then continue; fi
-  if [[ "$req_mem_mb" -gt "$chk_m" && "$chk_m" -gt 0 ]]; then continue; fi
-  if [[ "$req_gpu" -gt 0 && "$chk_g" == "0" ]]; then continue; fi
-  if [[ "$req_gpu" -gt "$chk_g" && "$chk_g" -gt 0 ]]; then continue; fi
+  if [[ "$req_cpu" -gt "$chk_c" ]]; then continue; fi
+  if [[ "$req_mem_mb" -gt "$chk_m" ]]; then continue; fi
+  if [[ "$req_gpu" -gt 0 && "$chk_g" -lt "$req_gpu" ]]; then continue; fi
 
   if [[ "$need_time" == "1" ]]; then
     pm="$(partition_minutes "$maxt")"

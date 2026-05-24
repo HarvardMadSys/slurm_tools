@@ -247,7 +247,8 @@ if [[ -z "$NEW_VER" ]]; then
 fi
 
 say "Applying ${NEW_VER} to ${INSTALL_ROOT}..."
-# Replace install tree contents; keep user edits only outside tracked files.
+# Replace install tree contents (rsync --delete removes files not in the release).
+# If INSTALL_ROOT is a git clone, .git is removed unless you set SLURM_TOOLS_ROOT elsewhere.
 if command -v rsync >/dev/null 2>&1; then
   rsync -a --delete "${STAGE}/" "${INSTALL_ROOT}/"
 else

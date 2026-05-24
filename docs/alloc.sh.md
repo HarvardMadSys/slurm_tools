@@ -1,65 +1,67 @@
-# alloc.sh - SLURM GPU Allocation Script
+# slurm-alloc - SLURM GPU allocation script
 
 ## Overview
-Interactive SLURM job allocation script that automatically finds the best partition and waits for resource allocation. Supports GPU allocation with simplified GPU type names.
 
-## Basic Usage
+Interactive SLURM job allocation: auto-partition via `best_partition`, submit a placeholder job, wait until it is running on a valid node, then record the hostname under `~/.alloc/`.
+
+## Basic usage
+
 ```bash
-# Use defaults (16 CPUs, 256GB RAM, h100 GPU, auto-partition)
-./alloc.sh
-
-# Specify resources
-./alloc.sh -c 32 -m 512 -g 2 -u a100
-
-# Specify partition manually
-./alloc.sh -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
+slurm-alloc
+slurm-alloc -c 32 -m 512 -g 2 -u a100
+slurm-alloc -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
 ```
 
 ## Parameters
+
 | Flag | Parameter | Default | Description |
 |------|-----------|---------|-------------|
-| `-j` | JOB_NAME | `h100_$(whoami)` | Job name |
-| `-c` | CPU_CORE | `16` | Number of CPU cores |
-| `-m` | MEM_GB | `256` | Memory in GB |
-| `-u` | GPU_TYPE | `h100` | GPU type (see below) |
-| `-g` | GPU_COUNT | `0` | Number of GPUs |
-| `-t` | TIMEOUT_HOURS | `12` | Job timeout in hours |
-| `-p` | PARTITION | `best` | Partition name |
-| `-h` | | | Show help |
+| `-j` | JOB_NAME | derived | `whoami` if `-g 0`, else `${GPU_COUNT}${GPU_TYPE}` |
+| `-n` | NODES | `1` | Number of nodes |
+| `-c` | CPU_CORE | `16` | CPU cores per node |
+| `-m` | MEM_GB | `256` | Memory per node (GB) |
+| `-u` | GPU_TYPE | `h100` | Short GPU name (see below) |
+| `-g` | GPU_COUNT | `1` | GPUs per node (`0` for CPU-only) |
+| `-t` | TIMEOUT_HOURS | `12` | Wall time (hours; `>23` becomes `D-HH:00:00`) |
+| `-p` | PARTITION | `best` | Partition or `best` for `best_partition` |
+| `-v` | | | Show version |
+| `-h` | | | Help |
 
-## GPU Types
-| Short Name | Full SLURM Name |
-|------------|------------------|
+## GPU types
+
+| Short name | SLURM gres name |
+|------------|-----------------|
 | `h100` | `nvidia_h100_80gb_hbm3` |
-| `a100` | `nvidia_a100-sxm4-80gb` |
-| `a100-80gb` | `nvidia_a100-sxm4-80gb` |
+| `h200` | `nvidia_h200` |
+| `a100`, `a100-80gb` | `nvidia_a100-sxm4-80gb` |
 | `a100-40gb` | `nvidia_a100-sxm4-40gb` |
 | `a40` | `nvidia_a40` |
-| `h200` | `nvidia_h200` |
+| `a100mig` | `nvidia_a100_3g.20gb` (partition `gpu_test` unless `SLURM_TOOLS_MIG_PARTITION` set) |
 
-## Features
-- **Auto-partition selection**: Uses `best_partition` script when `-p best` (default)
-- **Interactive waiting**: Shows progress dots while waiting for allocation
-- **Ctrl+C handling**: Automatically cancels job on interrupt
-- **Time format handling**: Supports timeouts > 24 hours (converts to days-hours format)
+## Site environment
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SLURM_TOOLS_ALLOC_SCRIPT` | Harvard lab sleep script | Batch script to run |
+| `SLURM_TOOLS_MIG_PARTITION` | `gpu_test` | Partition for `-u a100mig` with `-p best` |
+| `SLURM_TOOLS_SKIP_UPGRADE` | | `1` disables auto-upgrade |
+| `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | | `1` forces version check |
+
+## Behavior
+
+- Creates `logs/` before submit; checks `sbatch` exit status.
+- Waits using `scontrol` job state; exits on `FAILED`, `CANCELLED`, `TIMEOUT`, etc.
+- Ctrl+C runs `scancel` only if a job ID was obtained.
+- Writes `~/.alloc/${JOB_NAME}` with the first allocated node name.
 
 ## Examples
+
 ```bash
-# Quick H100 allocation
-./alloc.sh -g 1
-
-# Large memory job with A100
-./alloc.sh -c 32 -m 1024 -g 2 -u a100 -t 24
-
-# Specific partition (skip auto-selection)
-./alloc.sh -c 8 -m 64 -g 1 -u a40 -p gpu_test
-
-# Long-running job (48 hours)
-./alloc.sh -c 16 -m 256 -g 1 -u h100 -t 48
+slurm-alloc -g 1
+slurm-alloc -c 32 -m 1024 -g 2 -u a100 -t 24
+slurm-alloc -n 4 -c 64 -m 512 -g 4 -u h200 -t 48   # 4-node h200 job
+export SLURM_TOOLS_ALLOC_SCRIPT=/path/to/sleep.sh
+slurm-alloc -c 8 -m 64 -g 0 -t 4
 ```
 
-## Notes
-- Requires `best_partition` script in PATH for auto-partition selection
-- Creates log files in `logs/` directory (`%x.%j.out`, `%x.%j.err`)
-- Waits until job starts and shows allocated server name
-- Script exits when resources are successfully allocated 
+`~/.alloc/<JOB_NAME>` contains the full SLURM NodeList string (e.g. `node[01-04]`), usable directly with `srun --nodelist`.

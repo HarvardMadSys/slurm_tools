@@ -8,7 +8,8 @@ Monitor CPU and memory usage of processes for a specific SLURM job. The script g
 - **Parallel Processing**: SSH to multiple nodes simultaneously for fast execution
 - **SSH Monitoring**: SSH to each node to get real-time process information  
 - **Resource Usage**: Shows CPU percentage and memory usage (in MB)
-- **Process Filtering**: Filter processes by name (case-insensitive substring matching)
+- **Process Filtering**: Filter by command line substring (`ps` `cmd` column, case-insensitive)
+- **Clean JSON**: Progress and diagnostics go to stderr; stdout is only the table or JSON
 - **Error Handling**: Graceful handling of SSH timeouts and connection errors
 - **Null Filtering**: Automatically filters out invalid/null node entries
 - **Multiple Output Formats**: Table or JSON output (JSON includes process details)
@@ -42,7 +43,7 @@ Monitor CPU and memory usage of processes for a specific SLURM job. The script g
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--job-id` | `-j` | SLURM job ID to monitor (required) |
-| `--proc` | `-f` | Filter processes by name (case-insensitive substring match) |
+| `--proc` | `-f` | Filter processes by command substring (case-insensitive) |
 | `--json` | | Output results in JSON format (includes process details) |
 | `--help` | `-h` | Show help message |
 
@@ -66,7 +67,7 @@ Total Memory: 12953.4 MB
 ```
 Node                 CPU%     Memory(MB)   Processes  Status
 ----                 ----     ---------    ---------  ------
-Process filter: 'python' (case-insensitive substring match)
+Process filter: 'python' (case-insensitive substring match on command)
 
 holygpu8a16101       38.5     7234.2       3          OK
 holygpu8a16102       15.2     2145.1       2          OK
@@ -155,7 +156,7 @@ Checking 2 nodes in parallel...
 
 Node                 CPU%     Memory(MB)   Processes  Status
 ----                 ----     ---------    ---------  ------
-Process filter: 'python' (case-insensitive substring match)
+Process filter: 'python' (case-insensitive substring match on command)
 
 holygpu8a16101       98.5     8234.1       3          OK
 holygpu8a16102       67.3     5123.4       2          OK

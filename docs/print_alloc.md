@@ -5,9 +5,9 @@ Bash + awk over `scontrol`. Shows unallocated GPUs, CPUs, and memory per node in
 ## Usage
 
 ```bash
-print_alloc                          # default partition: gpu_requeue
+print_alloc
 print_alloc -p gpu_test
-print_alloc -p gpu_requeue -a        # add CPULoad and UsedMem(GB)
+print_alloc -p gpu_requeue -a
 print_alloc --help
 ```
 
@@ -15,7 +15,7 @@ print_alloc --help
 
 | Flag | Description |
 |------|-------------|
-| `-p`, `--partition` | Partition name (default: `gpu_requeue`) |
+| `-p`, `--partition` | Partition (default: `SLURM_TOOLS_DEFAULT_PARTITION` or `gpu_requeue`) |
 | `-a`, `--available` | Extra columns: CPU load and used memory |
 | `-h`, `--help` | Help |
 
@@ -25,4 +25,4 @@ Default: `NodeName`, `UnallocGPU`, `UnallocCPU`, `UnallocMem(GB)`, `Gres`, `Stat
 
 With `-a`: also `CPULoad`, `UsedMem(GB)`.
 
-Unallocated counts come from node capacity minus `AllocTRES`. GPU totals are parsed from `Gres` (`nvidia_*:N`).
+Unallocated counts come from node capacity minus `AllocTRES`. GPU totals are parsed from `Gres`.
