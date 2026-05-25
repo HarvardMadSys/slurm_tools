@@ -106,7 +106,8 @@ fi
 
 if ! slurm_tools_sbatch -p "${PARTITION}" \
   -J "${JOB_NAME}" \
-  -n "${NODE_COUNT}" \
+  --nodes="${NODE_COUNT}" \
+  --ntasks-per-node=1 \
   --mem="${MEM_GB}g" \
   --time="${TIMEOUT_STRING}" \
   -c "${CPU_CORE}" \

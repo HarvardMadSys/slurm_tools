@@ -68,11 +68,11 @@ avail_and_blob_stream() {
     st = ""; alc = ""; efctv = 0; rmem = 0; gres = ""; down = 0
     for (i = 1; i <= gn; i++) {
       ln = L[i]; sub(/^[[:space:]]+/, "", ln)
-      if (substr(ln, 1, 7) == "State=") st = fv(ln)
+      if (substr(ln, 1, 6) == "State=") st = fv(ln)
       if (index(st, "DOWN")) down = 1
       if (substr(ln, 1, 10) == "AllocTRES=") alc = fv_all(ln)
-      if (substr(ln, 1, 10) == "CPUEfctv=") efctv = fvnum(ln)
-      if (substr(ln, 1, 13) == "RealMemory=") rmem = fvnum(ln)
+      if (match(ln, /CPUEfctv=[0-9]+/)) efctv = substr(ln, RSTART+9, RLENGTH-9)+0
+      if (substr(ln, 1, 11) == "RealMemory=") rmem = fvnum(ln)
       if (substr(ln, 1, 5) == "Gres=") gres = fv(ln)
     }
     if (down) next
@@ -88,7 +88,10 @@ avail_and_blob_stream() {
       } else mb = x + 0
     }
     node_gpus = 0
-    if (gres ~ /nvidia/ && match(gres, /:[0-9]+$/)) node_gpus = substr(gres, RSTART + 1, RLENGTH - 1) + 0
+    if (gres ~ /nvidia/) {
+      g2 = gres; gsub(/\([^)]*\)/, "", g2)
+      if (match(g2, /:[0-9]+$/)) node_gpus = substr(g2, RSTART + 1, RLENGTH - 1) + 0
+    }
     cpus += ((efctv - ac) >= 0 ? efctv - ac : 0)
     amb += ((rmem - mb) >= 0 ? rmem - mb : 0)
     gpu += ((node_gpus - ag) >= 0 ? node_gpus - ag : 0)
@@ -139,24 +142,24 @@ scontrol show partition >"$RAW"
 split_prog="$(mktemp)"
 trap 'rm -f "$RAW" "$ENR" "$CANDS" "$split_prog"' EXIT
 cat <<'AWK' >"$split_prog"
-function fv(line, idx,tail){ idx=index(line,"="); if(!idx)return""; tail=substr(line,idx+1); sub(/^[[:space:]]+/,"",tail); sub(/[[:space:]].*$/,"",tail); return tail}
-function fv_all(line,idx){ idx=index(line,"="); if(!idx)return""; return substr(line,idx+1)}
-function fvnum(line){ return fv(line)+0 }
-function emit(blk){
+function xv(line, key,   i,r){ i=index(line,key "="); if(!i)return""; r=substr(line,i+length(key)+1); sub(/[[:space:]].*$/,"",r); return r}
+function xvn(line, key){ return xv(line,key)+0 }
+function emit(blk,    gn,LL,j,ln,v,nm,maxt,tres,wt,st,prio,nl_raw,tcpus,tnodes,tmem,tgpu,tgt,wc,wm,wgg,n,i,p,k,kk,vv,parts,tt){
   gn=split(blk,LL,/\n/)
-  nm=""; maxt="UNLIMITED"; tres=""; wt=""; st=""; prio=0
+  nm=""; maxt="UNLIMITED"; tres=""; wt=""; st=""; prio=0; nl_raw=""
   tcpus=tnodes=tmem=tgpu=0
   for(j=1;j<=gn;j++){
     ln=LL[j]; sub(/^[[:space:]]+/, "", ln)
     if(ln=="") continue
-    if(substr(ln,1,15)=="PartitionName=") nm=fv(ln)
-    else if(substr(ln,1,8)=="MaxTime=") maxt=fv(ln)
-    else if(substr(ln,1,11)=="TotalCPUs=") tcpus=fvnum(ln)
-    else if(substr(ln,1,12)=="TotalNodes=") tnodes=fvnum(ln)
-    else if(substr(ln,1,5)=="TRES=") tres=fv_all(ln)
-    else if(substr(ln,1,20)=="TRESBillingWeights=") wt=fv_all(ln)
-    else if(substr(ln,1,7)=="State=") st=fv(ln)
-    else if(substr(ln,1,14)=="PriorityTier=") prio=fvnum(ln)
+    v=xv(ln,"PartitionName"); if(v!="") nm=v
+    v=xv(ln,"State");         if(v!="") st=v
+    v=xv(ln,"MaxTime");       if(v!="") maxt=v
+    v=xvn(ln,"TotalCPUs");    if(v>0)   tcpus=v
+    v=xvn(ln,"TotalNodes");   if(v>0)   tnodes=v
+    if(index(ln,"TRES=")==1) tres=substr(ln,6)
+    if(index(ln,"TRESBillingWeights=")==1) wt=substr(ln,20)
+    v=xvn(ln,"PriorityTier"); if(v>0)   prio=v
+    if(index(ln,"Nodes=")==1 && index(ln,"AllocNodes=")==0) { nl_raw=xv(ln,"Nodes") }
   }
   if(nm==""||st=="") return
   tmem=0
@@ -165,20 +168,25 @@ function emit(blk){
   if(match(tres,/gres\/gpu=[0-9]+/)){
     tt=substr(tres,RSTART+9); sub(/([^0-9]).*/,"",tt); tgpu=tt+0
   }
+  # Extract GPU type string from TRES (e.g. gres/gpu:nvidia_h200=88 -> nvidia_h200)
+  tgt=""
+  if(match(tres,/gres\/gpu:[^=,]+=[0-9]+/)){
+    tgt=substr(tres,RSTART+9,RLENGTH-9); sub(/=[0-9]+$/,"",tgt)
+  }
   wc=wm=wgg=0
   n=split(wt,parts,",")
   for(i=1;i<=n;i++){
     p=parts[i]
     k=index(p,"="); if(!k) continue
-    key=substr(p,1,k-1); val=substr(p,k+1)
-    gsub(/^ +/,"",key); gsub(/ +$/, "", key)
-    gsub(/^ +/,"",val); gsub(/ +$/, "", val)
-    if(length(val) && substr(val,length(val),1)=="G") val=substr(val,1,length(val)-1)
-    if(key=="CPU") wc=val+0
-    else if(key=="Mem") wm=val+0
-    else if(key=="Gres/gpu") wgg=val+0
+    kk=substr(p,1,k-1); vv=substr(p,k+1)
+    gsub(/^ +/,"",kk); gsub(/ +$/, "", kk)
+    gsub(/^ +/,"",vv); gsub(/ +$/, "", vv)
+    if(length(vv) && substr(vv,length(vv),1)=="G") vv=substr(vv,1,length(vv)-1)
+    if(kk=="CPU") wc=vv+0
+    else if(kk=="Mem") wm=vv+0
+    else if(kk=="Gres/gpu") wgg=vv+0
   }
-  printf("%s\t%s\t%d\t%d\t%d\t%d\t%s\t%d\t%.17g\t%.17g\t%.17g\n", nm,maxt,tcpus,tnodes,tmem,tgpu,st,prio,wc,wm,wgg)
+  printf("%s\t%s\t%d\t%d\t%d\t%d\t%s\t%d\t%.17g\t%.17g\t%.17g\t%s\t%s\n", nm,maxt,tcpus,tnodes,tmem,tgpu,st,prio,wc,wm,wgg,tgt,nl_raw)
 }
 { lines[++nr]=$0 }
 END{
@@ -193,19 +201,19 @@ END{
 AWK
 
 : >"$ENR"
-while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg; do
+while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg tgt nl; do
   need_blob=0
   [[ "$SUMMARY" == "1" || "$GPU" != "0" || -n "${GPUTYPE}${GPUMEM}" ]] && need_blob=1
-  ac="$tcpus"; am="$tmem"; ag="$tgpu"; blob=""
-  nl=""
-  if [[ "$st" == "UP" ]]; then
-    nl="$(nodes_line_for_partition "$nm" || true)"
-  fi
-  if [[ "$st" == "UP" && -n "$nl" ]]; then
-    if [[ "$HAVE_AVAIL" == "1" ]]; then
+  ac="$tcpus"; am="$tmem"; ag="$tgpu"; blob="$tgt"
+  if [[ "$st" == "UP" && "$HAVE_AVAIL" == "1" && -n "$nl" ]]; then
+    # Skip scontrol show node if GPU-type filter already rules out this partition.
+    skip_node=0
+    if [[ -n "$GPUTYPE" ]]; then
+      bt="$(lc "$tgt")"; gt="$(lc "$GPUTYPE")"
+      [[ "$bt" != *"${gt}"* ]] && skip_node=1
+    fi
+    if [[ "$skip_node" == "0" ]]; then
       IFS='|' read -r blob ac am ag < <(scontrol show node "$nl" | avail_and_blob_stream)
-    elif [[ "$need_blob" == "1" ]]; then
-      IFS='|' read -r blob _ac _am _ag < <(scontrol show node "$nl" | avail_and_blob_stream)
     fi
   fi
   printf '%s\t%s\t%d\t%d\t%d\t%d\t%s\t%d\t%.17g\t%.17g\t%.17g\t%d\t%d\t%d\t%s\n' \
@@ -250,7 +258,7 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am a
       [[ "$nm" == "$skip" ]] && continue 2
     done
   else
-    for skip in ${SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB:-gpu_requeue gpu_test}; do
+    for skip in ${SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB:-gpu_requeue gpu_test gpu_h200}; do
       [[ "$nm" == "$skip" ]] && continue 2
     done
   fi
@@ -271,9 +279,9 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am a
     chk_g="$tgpu"
   fi
 
-  if [[ "$req_cpu" -gt "$chk_c" ]]; then continue; fi
-  if [[ "$req_mem_mb" -gt "$chk_m" ]]; then continue; fi
-  if [[ "$req_gpu" -gt 0 && "$chk_g" -lt "$req_gpu" ]]; then continue; fi
+  if [[ "$chk_c" -gt 0 && "$req_cpu" -gt "$chk_c" ]]; then continue; fi
+  if [[ "$chk_m" -gt 0 && "$req_mem_mb" -gt "$chk_m" ]]; then continue; fi
+  if [[ "$req_gpu" -gt 0 && "$chk_g" -gt 0 && "$chk_g" -lt "$req_gpu" ]]; then continue; fi
 
   if [[ "$need_time" == "1" ]]; then
     pm="$(partition_minutes "$maxt")"

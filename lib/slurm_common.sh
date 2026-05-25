@@ -132,14 +132,29 @@ slurm_tools_resolve_partition() {
   local total_mem=$(( mem * nodes ))
   local total_gpu=$(( gpu_count * nodes ))
 
+  local bp_gpu_args=()
   if [[ "$total_gpu" -gt 0 ]]; then
     if [[ "$gpu_type" == "a100mig" ]]; then
       printf '%s' "$mig_part"
       return 0
     fi
-    best_partition -n -c "$total_cpu" -m "$total_mem" --gpu-type "$gpu_type" -g "$total_gpu" -t "$timeout"
-  else
-    best_partition -n -c "$total_cpu" -m "$total_mem" -t "$timeout"
+    bp_gpu_args=(--gpu-type "$gpu_type" -g "$total_gpu")
+  fi
+
+  local result
+  result="$(best_partition -n -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  if [[ -n "$result" ]]; then
+    printf '%s' "$result"
+    return 0
+  fi
+
+  # No partition found using currently available resources; retry against total capacity.
+  slurm_tools_print_log "warning: no partition has enough free resources right now; retrying against total capacity" >&2
+  result="$(best_partition -n --total-resources -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  if [[ -n "$result" ]]; then
+    slurm_tools_print_log "warning: ${result} may be fully allocated; job will queue" >&2
+    printf '%s' "$result"
+    return 0
   fi
 }
 

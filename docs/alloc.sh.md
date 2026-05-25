@@ -54,6 +54,18 @@ slurm-alloc -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
 - Ctrl+C runs `scancel` only if a job ID was obtained.
 - Writes `~/.alloc/${JOB_NAME}` with the first allocated node name.
 
+## Partition selection (`-p best`)
+
+`-c/-m/-g` are per-node; totals (`cpu*nodes`, `mem*nodes`, `gpu*nodes`) are passed to `best_partition`.
+
+1. First pass uses currently **available** resources (`best_partition -n`).
+2. If nothing fits, falls back to **total** capacity (`best_partition -n --total-resources`); the job will queue. A warning is logged to stderr:
+   `warning: no partition has enough free resources right now; retrying against total capacity`
+   `warning: <partition> may be fully allocated; job will queue`
+3. If neither pass finds a partition, exits with `No suitable partitions found for your requirements.`
+
+`-u a100mig` with `-p best` short-circuits to `$SLURM_TOOLS_MIG_PARTITION` (default `gpu_test`).
+
 ## Examples
 
 ```bash
