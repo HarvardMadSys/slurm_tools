@@ -74,6 +74,13 @@ if [[ ! -f "$SCRIPT" ]]; then
   exit 1
 fi
 
+if [[ "$SCRIPT" == /* ]]; then
+  SCRIPT_ABS="$SCRIPT"
+else
+  SCRIPT_ABS="$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")"
+fi
+SCRIPT_DIR_ABS="$(cd "$(dirname "$SCRIPT_ABS")" && pwd)"
+
 if [[ -z "${JOB_NAME}" ]]; then
   JOB_NAME="$(slurm_tools_default_job_name "$GPU_COUNT" "$GPU_TYPE")"
 fi
@@ -105,6 +112,7 @@ if ! slurm_tools_sbatch -p "${PARTITION}" \
   --mem="${MEM_GB}g" \
   --time="${TIMEOUT_STRING}" \
   -c "${CPU_CORE}" \
+  --export="ALL,SLURM_TOOLS_SUBMIT_SCRIPT=${SCRIPT_ABS},SLURM_TOOLS_SUBMIT_SCRIPT_DIR=${SCRIPT_DIR_ABS}" \
   --mail-type=ALL \
   --output=logs/%x.%j.out \
   --error=logs/%x.%j.err \
