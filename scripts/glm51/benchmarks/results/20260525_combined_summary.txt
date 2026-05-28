@@ -1,0 +1,53 @@
+Prefill Winners
+  sglang
+    input_len=1024 best=tp4_pp2 input_throughput=4949.2
+    input_len=2048 best=tp4_pp2 input_throughput=9632.18
+    input_len=4096 best=tp4_pp2 input_throughput=8970.52
+    input_len=8192 best=tp4_pp2 input_throughput=9423.96
+    input_len=16384 best=tp4_pp2 input_throughput=9382.21
+    input_len=32768 best=tp4_pp2 input_throughput=8563.86
+    input_len=65536 best=tp8_pp1 input_throughput=5993.96
+    input_len=131072 best=tp8_pp1 input_throughput=4413.21
+  vllm
+    input_len=1024 best=tp4_pp2 input_throughput=5057.4
+    input_len=2048 best=tp4_pp2 input_throughput=8058.06
+    input_len=4096 best=tp4_pp2 input_throughput=8937.89
+    input_len=8192 best=tp4_pp2 input_throughput=9150.81
+    input_len=16384 best=tp4_pp2 input_throughput=11366.18
+    input_len=32768 best=tp1_pp8 input_throughput=13811.63
+    input_len=65536 best=tp1_pp8 input_throughput=18005.57
+    input_len=131072 best=tp1_pp8 input_throughput=19568.32
+Decode Winners
+  sglang
+    batch_size=1 best=tp8_pp1 output_throughput=47.16
+    batch_size=2 best=tp8_pp1 output_throughput=91.91
+    batch_size=4 best=tp8_pp1 output_throughput=179.26
+    batch_size=8 best=tp8_pp1 output_throughput=316.88
+    batch_size=16 best=tp8_pp1 output_throughput=543.54
+    batch_size=32 best=tp8_pp1 output_throughput=974.47
+    batch_size=64 best=tp8_pp1 output_throughput=2138.7
+    batch_size=128 best=tp8_pp1 output_throughput=3501.07
+  vllm
+    batch_size=1 best=tp4_pp2 output_throughput=45.75
+    batch_size=2 best=tp4_pp2 output_throughput=87.95
+    batch_size=4 best=tp2_pp4 output_throughput=146.87
+    batch_size=8 best=tp4_pp2 output_throughput=298.02
+    batch_size=16 best=tp4_pp2 output_throughput=577.24
+    batch_size=32 best=tp4_pp2 output_throughput=1094.1
+    batch_size=64 best=tp4_pp2 output_throughput=1924.93
+    batch_size=128 best=tp4_pp2 output_throughput=3182.47
+Topology GMeans
+  sglang tp1_pp8 prefill_input_throughput_gmean=5392.64
+  sglang tp2_pp4 prefill_input_throughput_gmean=6699.07
+  sglang tp4_pp2 prefill_input_throughput_gmean=8286.69
+  sglang tp8_pp1 prefill_input_throughput_gmean=6520.25
+  vllm tp1_pp8 prefill_input_throughput_gmean=8192.24
+  vllm tp2_pp4 prefill_input_throughput_gmean=8842.29
+  vllm tp4_pp2 prefill_input_throughput_gmean=9324.15
+  sglang tp1_pp8 decode_output_throughput_gmean=45.7
+  sglang tp2_pp4 decode_output_throughput_gmean=45.05
+  sglang tp4_pp2 decode_output_throughput_gmean=45.61
+  sglang tp8_pp1 decode_output_throughput_gmean=420.44
+  vllm tp1_pp8 decode_output_throughput_gmean=255.53
+  vllm tp2_pp4 decode_output_throughput_gmean=293.52
+  vllm tp4_pp2 decode_output_throughput_gmean=380.0

@@ -38,6 +38,7 @@ export GLM51_SGLANG_CUDA_GRAPH_MAX_BS="${GLM51_SGLANG_CUDA_GRAPH_MAX_BS:-128}"
 export GLM51_SGLANG_CUDA_GRAPH_MAX_BS_PP="${GLM51_SGLANG_CUDA_GRAPH_MAX_BS_PP:-16}"
 export GLM51_SGLANG_DISABLE_CUDA_GRAPH_PP="${GLM51_SGLANG_DISABLE_CUDA_GRAPH_PP:-1}"
 export GLM51_WATCHDOG_TIMEOUT="${GLM51_WATCHDOG_TIMEOUT:-1800}"
+export GLM51_QUANTIZATION="${GLM51_QUANTIZATION:-}"
 export GLM51_VLLM_VERSION="${GLM51_VLLM_VERSION:-0.21.0}"
 export GLM51_SGLANG_VERSION="${GLM51_SGLANG_VERSION:-0.5.10.post1}"
 export GLM51_VLLM_DEV_MODE="${GLM51_VLLM_DEV_MODE:-1}"
@@ -161,13 +162,15 @@ glm51_prepare_node_local_cache_env() {
   export DG_JIT_CACHE_DIR="${DG_JIT_CACHE_DIR:-$(cache_dir_with_legacy_fallback "${base_dir}/deep_gemm/cache" "${legacy_dir}/deep_gemm/cache")}"
   export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-$(cache_dir_with_legacy_fallback "${base_dir}/torch_extensions" "${legacy_dir}/torch_extensions")}"
   export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-$(cache_dir_with_legacy_fallback "${base_dir}/torchinductor" "${legacy_dir}/torchinductor")}"
+  export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-$(cache_dir_with_legacy_fallback "${base_dir}/flashinfer" "${legacy_dir}/flashinfer")}"
 
   mkdir -p \
     "${XDG_CACHE_HOME}" \
     "${TRITON_CACHE_DIR}" \
     "${DG_JIT_CACHE_DIR}" \
     "${TORCH_EXTENSIONS_DIR}" \
-    "${TORCHINDUCTOR_CACHE_DIR}"
+    "${TORCHINDUCTOR_CACHE_DIR}" \
+    "${FLASHINFER_WORKSPACE_BASE}"
 }
 
 glm51_check_parallelism() {
@@ -310,6 +313,9 @@ glm51_sglang_args() {
     --disable-radix-cache
     --enable-metrics
   )
+  if [[ -n "${GLM51_QUANTIZATION}" ]]; then
+    args+=(--quantization "${GLM51_QUANTIZATION}")
+  fi
   if [[ -n "${GLM51_TOOL_CALL_PARSER}" ]]; then
     args+=(--tool-call-parser "${GLM51_TOOL_CALL_PARSER}")
   fi

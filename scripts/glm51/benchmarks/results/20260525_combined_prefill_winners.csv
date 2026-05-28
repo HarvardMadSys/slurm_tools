@@ -1,0 +1,17 @@
+backend,input_len,best_topology,input_throughput,ttft_s
+sglang,1024,tp4_pp2,4949.2,0.2069
+sglang,2048,tp4_pp2,9632.18,0.2126
+sglang,4096,tp4_pp2,8970.52,0.4566
+sglang,8192,tp4_pp2,9423.96,0.8693
+sglang,16384,tp4_pp2,9382.21,1.7463
+sglang,32768,tp4_pp2,8563.86,3.8263
+sglang,65536,tp8_pp1,5993.96,10.9337
+sglang,131072,tp8_pp1,4413.21,29.6999
+vllm,1024,tp4_pp2,5057.4,0.2025
+vllm,2048,tp4_pp2,8058.06,0.2542
+vllm,4096,tp4_pp2,8937.89,0.4583
+vllm,8192,tp4_pp2,9150.81,0.8952
+vllm,16384,tp4_pp2,11366.18,1.4415
+vllm,32768,tp1_pp8,13811.63,2.3725
+vllm,65536,tp1_pp8,18005.57,3.6398
+vllm,131072,tp1_pp8,19568.32,6.6982

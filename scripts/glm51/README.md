@@ -66,6 +66,13 @@ Launch the `tp8_pp1` SGLang topology and export it through the reverse SSH tunne
 GLM51_JOB_ID=<job_id> scripts/glm51/launch_tp8_pp1.sh sglang --stop-first --tunnel
 ```
 
+`tp8_pp1` uses safer deploy defaults than `tp4_pp2`: context length `131200`,
+SGLang static memory fraction `0.70`, and CUDA graph max batch size `16`. This
+avoids a first-request OOM seen with the full `202752` context and graph batch
+size `128`. Override these with `GLM51_CONTEXT_LENGTH`,
+`GLM51_MEM_FRACTION_STATIC`, and `GLM51_SGLANG_CUDA_GRAPH_MAX_BS` if you want to
+experiment with larger settings.
+
 Equivalent one-command deploy wrapper:
 
 ```bash
@@ -153,6 +160,11 @@ The cleaned experiment outputs are under `logs/glm51/results/`.
 ## Practical Notes
 
 - SGLang was easier to set up and was the most reliable backend in these runs.
+- SGLang `tp8_pp1` needs more free transient GPU memory than `tp4_pp2`; the
+  wrapper defaults are intentionally conservative to prevent first-request OOMs.
+- FlashInfer JIT uses `FLASHINFER_WORKSPACE_BASE`, not `XDG_CACHE_HOME`; the
+  launcher puts it on node-local scratch to avoid stale NFS file handles during
+  first-request sampling kernel compilation.
 - vLLM required a patched vLLM source tree for GLM-5.1 FP8 pipeline-parallel loading.
 - The known-good multi-node network path is `ib0`; previous bandwidth checks measured roughly 373-376 Gb/s unidirectional and 738-746 Gb/s bidirectional aggregate.
 - vLLM `tp8_pp1` was not kept in the default vLLM benchmark command because it previously failed or stalled.
@@ -167,6 +179,8 @@ The cleaned experiment outputs are under `logs/glm51/results/`.
 - `GLM51_RAY_PORT`: Ray port for vLLM.
 - `GLM51_MODEL_LOCAL`: local model path override.
 - `GLM51_TOOL_CALL_PARSER`: SGLang OpenAI tool-call parser; defaults to `glm47` for GLM-5-family models.
+- `FLASHINFER_WORKSPACE_BASE`: FlashInfer JIT workspace; defaults to node-local
+  scratch inside the Slurm job.
 - `GLM51_TUNNEL_HOST`: reverse SSH tunnel host; defaults to `internal.freeinference.org`.
 - `GLM51_TUNNEL_PORT`: reverse SSH tunnel port; defaults to `8002`.
 - `GLM51_TUNNEL_BIND`: remote bind address; defaults to `0.0.0.0`.

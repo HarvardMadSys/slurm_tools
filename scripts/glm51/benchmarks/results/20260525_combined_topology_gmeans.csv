@@ -1,0 +1,15 @@
+backend,topology,metric,value
+sglang,tp1_pp8,prefill_input_throughput_gmean,5392.64
+sglang,tp2_pp4,prefill_input_throughput_gmean,6699.07
+sglang,tp4_pp2,prefill_input_throughput_gmean,8286.69
+sglang,tp8_pp1,prefill_input_throughput_gmean,6520.25
+vllm,tp1_pp8,prefill_input_throughput_gmean,8192.24
+vllm,tp2_pp4,prefill_input_throughput_gmean,8842.29
+vllm,tp4_pp2,prefill_input_throughput_gmean,9324.15
+sglang,tp1_pp8,decode_output_throughput_gmean,45.7
+sglang,tp2_pp4,decode_output_throughput_gmean,45.05
+sglang,tp4_pp2,decode_output_throughput_gmean,45.61
+sglang,tp8_pp1,decode_output_throughput_gmean,420.44
+vllm,tp1_pp8,decode_output_throughput_gmean,255.53
+vllm,tp2_pp4,decode_output_throughput_gmean,293.52
+vllm,tp4_pp2,decode_output_throughput_gmean,380.0

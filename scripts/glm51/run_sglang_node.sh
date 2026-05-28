@@ -23,5 +23,6 @@ mapfile -t args < <(glm51_sglang_args "${rank}")
 exec > >(stdbuf -oL tee -a "${log}") 2>&1
 echo "=== $(date -Is) backend=sglang host=$(hostname -s) rank=${rank} label=${label} job=${GLM51_JOB_ID} ==="
 echo "$(glm51_print_context)"
+echo "cache_dirs=x:${XDG_CACHE_HOME} triton:${TRITON_CACHE_DIR} deep_gemm:${DG_JIT_CACHE_DIR} flashinfer:${FLASHINFER_WORKSPACE_BASE}"
 echo "cmd: ${GLM51_SGLANG_PYTHON} ${args[*]}"
 exec "${GLM51_SGLANG_PYTHON}" "${args[@]}"
