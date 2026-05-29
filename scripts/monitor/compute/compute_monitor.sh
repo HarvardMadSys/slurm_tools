@@ -27,11 +27,12 @@ _job_root() {
 }
 
 _log_file() {
-    local day dir
+    local day dir prefix
     day="$(date +%Y-%m-%d)"
     dir="$(_job_root)/${day}"
     mkdir -p "$dir"
-    printf '%s/%s.log' "$dir" "$HOSTNAME"
+    prefix="${SLURM_JOB_PARTITION:+${SLURM_JOB_PARTITION}_}"
+    printf '%s/%s%s.log' "$dir" "$prefix" "$HOSTNAME"
 }
 
 _pid_file() {
@@ -93,28 +94,83 @@ _snapshot() {
 
         printf '\n--- NFS IO (active mounts only) ---\n'
         if _has_cmd nfsiostat; then
-            printf '%-40s %8s  %10s %8s  %10s %8s\n' \
-                "mountpoint" "ops/s" "rd_kB/s" "rd_rtt_ms" "wr_kB/s" "wr_rtt_ms"
-            nfsiostat 2>/dev/null | awk '
+            printf '%-40s %8s  %10s %8s %8s  %10s %8s %8s\n' \
+                "mountpoint" "ops/s" "rd_kB/s" "rd_rtt" "rd_que" "wr_kB/s" "wr_rtt" "wr_que"
+            printf '%-40s %8s  %10s %8s %8s  %10s %8s %8s\n' \
+                "" "" "" "(ms)" "(ms)" "" "(ms)" "(ms)"
+            nfsiostat 1 2 2>/dev/null | awk '
                 /mounted on/ {
                     match($0, /mounted on ([^:]+)/, a); mp=a[1]
-                    ops=0; rkb=0; rrtt=0; wkb=0; wrtt=0; state=0; next
+                    ops=0; rkb=0; rrtt=0; rexe=0; wkb=0; wrtt=0; wexe=0; state=0; next
                 }
                 /^[[:space:]]+ops\/s/            { state=1; next }
                 state==1 && /^[[:space:]]+[0-9]/ { ops=$1; state=0; next }
                 /^read:/                          { state=2; next }
-                state==2 && /^[[:space:]]+[0-9]/ { rkb=$2; rrtt=$6; state=0; next }
+                state==2 && /^[[:space:]]+[0-9]/ {
+                    rkb=$2; rrtt=$(NF-1); rexe=$NF; state=0; next
+                }
                 /^write:/                         { state=3; next }
                 state==3 && /^[[:space:]]+[0-9]/ {
-                    wkb=$2; wrtt=$6; state=0
+                    wkb=$2; wrtt=$(NF-1); wexe=$NF; state=0
                     if (ops > 0.005)
-                        printf "%-40s %8.3f  %10.1f %8.1f  %10.1f %8.1f\n",
-                            mp, ops, rkb, rrtt, wkb, wrtt
+                        printf "%-40s %8.3f  %10.1f %8.1f %8.1f  %10.1f %8.1f %8.1f\n",
+                            mp, ops, rkb, rrtt, rexe-rrtt, wkb, wrtt, wexe-wrtt
                 }
             ' | sort -k2 -rn || true
         else
             printf 'nfsiostat not found\n'
         fi
+
+        printf '\n--- NFS RPC Stats (retransmits since mount) ---\n'
+        if [[ -r /proc/net/rpc/nfs ]]; then
+            awk '/^rpc /{printf "calls=%s  retransmissions=%s  auth_refreshes=%s\n",$2,$3,$4}' \
+                /proc/net/rpc/nfs
+        else
+            printf '/proc/net/rpc/nfs not readable\n'
+        fi
+
+        printf '\n--- NFS Mountstats (cumulative RTT breakdown + retransmits) ---\n'
+        # avg_queue = client slot-table wait; avg_rtt = server+network; bad_xid > 0 = serious
+        if [[ -r /proc/self/mountstats ]]; then
+            awk '
+            /mounted on .* with fstype nfs/ {
+                match($0, /mounted on ([^ :]+)/, a); mp=a[1]
+                printf "\n%s\n", mp; next
+            }
+            mp && /xprt:.*tcp/ {
+                # fields: xprt: tcp srcport bind conn_cnt conn_time idle sends recvs bad_xid req_u backlog_u
+                printf "  xprt:  bad_xid=%s  avg_slot=%.2f  avg_backlog=%.2f\n", $10, $11, $12; next
+            }
+            mp && /^[[:space:]]+(READ|WRITE):/ {
+                op=$1; ops=$2; retrans=$3; q_ms=$6; rtt_ms=$7; exe_ms=$8
+                if (ops > 0)
+                    printf "  %-7s ops=%d retrans=%d avg_queue=%.2fms avg_rtt=%.2fms avg_exe=%.2fms\n",
+                        op, ops, retrans, q_ms/ops, rtt_ms/ops, exe_ms/ops
+            }
+            ' /proc/self/mountstats
+        else
+            printf '/proc/self/mountstats not readable\n'
+        fi
+
+        printf '\n--- D-State Processes (blocked in uninterruptible I/O wait) ---\n'
+        ps axo stat,pid,user,args --no-headers 2>/dev/null \
+            | awk '$1 ~ /^D/ {print}' || true
+
+        printf '\n--- Sleeping Process Wait Channels ---\n'
+        printf '%-6s  %-20s  %s\n' COUNT WCHAN COMMAND
+        ps axo pid,stat,wchan=WAIT,comm --no-headers 2>/dev/null \
+            | awk '$2 ~ /^S/ {print $3, $4}' \
+            | sort | uniq -c | sort -rn | head -20 \
+            | awk '{printf "%-6s  %-20s  %s\n", $1, $2, $3}' || true
+
+        printf '\n--- Top Sleeping Processes (wchan + syscall) ---\n'
+        ps axo pid,ppid,user,%cpu,stat,wchan=WAIT,args --no-headers --sort=-%cpu 2>/dev/null \
+            | awk '$5 ~ /^S/ {print $1, $2, $3, $4, $6}' | head -20 \
+            | while read -r pid ppid user cpu wchan; do
+                syscall="$(cat "/proc/$pid/syscall" 2>/dev/null || echo 'N/A')"
+                printf 'pid=%-8s user=%-12s cpu=%-5s wchan=%-20s syscall=%s\n' \
+                    "$pid" "$user" "$cpu" "$wchan" "$syscall"
+            done || true
 
         printf '\n--- GPU Summary (nvidia-smi) ---\n'
         if _has_cmd nvidia-smi; then
@@ -147,7 +203,7 @@ _snapshot() {
         fi
 
         printf '\n--- All Processes (ps sorted by CPU%%) ---\n'
-        ps -eo pid,ppid,user,%cpu,%mem,rss,stat,start,time,args --sort=-%cpu || true
+        ps -eo pid,ppid,user,%cpu,%mem,rss,stat,wchan,start,time,args --sort=-%cpu || true
 
         printf '\n--- Per-Process IO (pidstat -dhl, 1-sec avg) ---\n'
         if _has_cmd pidstat; then
@@ -174,7 +230,7 @@ _daemon() {
     trap 'rm -f "$pid_file"' EXIT
 
     while true; do
-        _snapshot
+        _snapshot || true
         sleep "$INTERVAL"
     done
 }

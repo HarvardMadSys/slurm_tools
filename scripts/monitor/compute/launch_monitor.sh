@@ -2,6 +2,7 @@
 # Launch and control compute_monitor.sh across Slurm allocations.
 # Usage:
 #   launch_monitor.sh allocate -- submit dedicated monitor jobs for one or more partitions
+#   launch_monitor.sh cycle    -- repeatedly submit one-shot snapshot jobs every CYCLE_INTERVAL seconds
 #   launch_monitor.sh start    -- start a monitor task on every node in an existing allocation
 #   launch_monitor.sh stop     -- stop one monitor job or all tracked monitor allocations
 #   launch_monitor.sh status   -- report one monitor job or all tracked monitor allocations
@@ -15,7 +16,7 @@ MONITOR_SCRIPT="${SCRIPT_DIR}/compute_monitor.sh"
 OUTPUT_DIR="${COMPUTE_MONITOR_OUTPUT_DIR:-${SCRIPT_DIR}/logs}"
 PID_DIR="${COMPUTE_MONITOR_PID_DIR:-${HOME}/.run}"
 INTERVAL="${COMPUTE_MONITOR_INTERVAL:-60}"
-PARTITION_SPEC="${COMPUTE_MONITOR_PARTITION:-}"
+PARTITION_SPEC="${COMPUTE_MONITOR_PARTITION:-test,gpu_test,serial_requeue,gpu_requeue}"
 ACCOUNT="${COMPUTE_MONITOR_ACCOUNT:-}"
 QOS="${COMPUTE_MONITOR_QOS:-}"
 TIME_LIMIT="${COMPUTE_MONITOR_TIME:-00:30:00}"
@@ -23,6 +24,10 @@ CONSTRAINT="${COMPUTE_MONITOR_CONSTRAINT:-}"
 RESERVATION="${COMPUTE_MONITOR_RESERVATION:-}"
 EXCLUDE="${COMPUTE_MONITOR_EXCLUDE:-}"
 EXCLUDE_PARTITIONS="${COMPUTE_MONITOR_EXCLUDE_PARTITIONS:-}"
+CYCLE_INTERVAL="${COMPUTE_MONITOR_CYCLE_INTERVAL:-300}"
+CYCLE_JOB_TIME="${COMPUTE_MONITOR_CYCLE_JOB_TIME:-00:05:00}"
+CYCLE_STATE_FILE="${COMPUTE_MONITOR_CYCLE_STATE_FILE:-${PID_DIR}/compute_monitor_cycle_jobs.tsv}"
+CYCLE_MAX_NODES="${COMPUTE_MONITOR_CYCLE_MAX_NODES:-50}"
 STATE_FILE="${COMPUTE_MONITOR_STATE_FILE:-${PID_DIR}/compute_monitor_jobs.tsv}"
 ALLOCATE_NODELIST="${COMPUTE_MONITOR_ALLOCATE_NODELIST:-}"
 ALLOC_JOB_NAME_PREFIX="${COMPUTE_MONITOR_ALLOC_JOB_NAME_PREFIX:-compute-monitor-alloc}"
@@ -141,7 +146,7 @@ _remove_state_job_id() {
 
 _job_info_for() {
     local job_id="$1"
-    squeue -j "$job_id" -h -o "%T|%R|%P|%D|%N|%j" | head -n 1 || true
+    squeue -j "$job_id" -h -o "%T|%R|%P|%D|%N|%j" 2>/dev/null | head -n 1 || true
 }
 
 _job_exists_for() {
@@ -375,7 +380,7 @@ _require_running_job() {
 _load_nodes() {
     local job_nodes=()
     mapfile -t job_nodes < <(
-        scontrol show hostnames "$(squeue -j "${JOB_ID}" -h -o "%N")"
+        scontrol show hostnames "$(squeue -j "${JOB_ID}" -h -o "%N" 2>/dev/null)"
     )
     if [[ "${#job_nodes[@]}" -eq 0 ]]; then
         printf 'compute monitor: failed to resolve nodes for job %s.\n' "$JOB_ID" >&2
@@ -465,6 +470,24 @@ _load_allocation_nodes_for_partition() {
     return 0
 }
 
+_load_available_nodes_for_partition() {
+    local partition="$1"
+    sinfo -h -N -p "$partition" -o "%N|%T|%C|%e" 2>/dev/null \
+        | awk -F'|' '
+            {
+                state = tolower($2)
+                gsub(/[^a-z]/, "", state)
+                if (state != "idle" && state != "mixed" && state != "allocated" && state != "completing") next
+                n = split($3, cpu, "/")
+                if (n < 2 || cpu[2] + 0 < 1) next
+                free_mb = ($4 == "N/A" || $4 == "" ? 0 : $4 + 0)
+                if (free_mb < 1024) next
+                print $1
+            }
+        ' \
+        | sort -u
+}
+
 _partition_requires_gpu() {
     local partition="$1"
     [[ "$partition" == *gpu* ]]
@@ -498,7 +521,7 @@ _submit_allocation_job() {
     local node_count="$3"
     local job_name="${ALLOC_JOB_NAME_PREFIX}-${partition}"
 
-    mkdir -p "$OUTPUT_DIR" "$PID_DIR"
+    mkdir -p "$OUTPUT_DIR" "${OUTPUT_DIR}/slurm" "$PID_DIR"
 
     local batch_file
     batch_file="$(mktemp)"
@@ -509,7 +532,7 @@ export COMPUTE_MONITOR_JOB_ID="\${SLURM_JOB_ID}"
 export COMPUTE_MONITOR_OUTPUT_DIR='${OUTPUT_DIR}'
 export COMPUTE_MONITOR_PID_DIR='${PID_DIR}'
 export COMPUTE_MONITOR_INTERVAL='${INTERVAL}'
-mkdir -p '${OUTPUT_DIR}' '${PID_DIR}'
+mkdir -p '${OUTPUT_DIR}' '${OUTPUT_DIR}/slurm' '${PID_DIR}'
 srun --ntasks="\${SLURM_JOB_NUM_NODES}" --nodes="\${SLURM_JOB_NUM_NODES}" --ntasks-per-node=1 -w '${nodes_csv}' bash '${MONITOR_SCRIPT}' _daemon_internal
 EOF
     chmod +x "$batch_file"
@@ -528,8 +551,8 @@ EOF
         --exclusive
         --nodelist="${nodes_csv}"
         --time="${partition_time}"
-        --output="${OUTPUT_DIR}/alloc_%j.out"
-        --error="${OUTPUT_DIR}/alloc_%j.err"
+        --output="${OUTPUT_DIR}/slurm/alloc_%j.out"
+        --error="${OUTPUT_DIR}/slurm/alloc_%j.err"
     )
 
     if [[ -n "$ACCOUNT" ]]; then
@@ -569,6 +592,67 @@ EOF
         return 1
     fi
 
+    return 0
+}
+
+_submit_node_job() {
+    local partition="$1"
+    local node="$2"
+    local job_name="${ALLOC_JOB_NAME_PREFIX}-cycle-${partition}"
+
+    local batch_file
+    batch_file="$(mktemp)"
+    cat > "$batch_file" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export COMPUTE_MONITOR_JOB_ID="\${SLURM_JOB_ID}"
+export COMPUTE_MONITOR_OUTPUT_DIR='${OUTPUT_DIR}'
+export COMPUTE_MONITOR_PID_DIR='${PID_DIR}'
+mkdir -p '${OUTPUT_DIR}/slurm' '${PID_DIR}'
+bash '${MONITOR_SCRIPT}' once
+scancel "\${SLURM_JOB_ID}"
+EOF
+    chmod +x "$batch_file"
+
+    local cmd=(
+        sbatch
+        --parsable
+        --job-name="${job_name}"
+        --partition="${partition}"
+        --nodelist="${node}"
+        --nodes=1
+        --ntasks=1
+        --cpus-per-task=1
+        --mem=1G
+        --time="${CYCLE_JOB_TIME}"
+        --output="${OUTPUT_DIR}/slurm/cycle_%j.out"
+        --error="${OUTPUT_DIR}/slurm/cycle_%j.err"
+    )
+
+    if [[ -n "$ACCOUNT" ]]; then
+        cmd+=(--account="${ACCOUNT}")
+    fi
+    if [[ -n "$QOS" ]]; then
+        cmd+=(--qos="${QOS}")
+    fi
+    if [[ -n "$CONSTRAINT" ]]; then
+        cmd+=(--constraint="${CONSTRAINT}")
+    fi
+    if [[ -n "$RESERVATION" ]]; then
+        cmd+=(--reservation="${RESERVATION}")
+    fi
+    if _partition_requires_gpu "$partition"; then
+        cmd+=(--gpus-per-node="${GPU_PER_NODE}")
+    fi
+    cmd+=("$batch_file")
+
+    local submit_output
+    if ! submit_output="$("${cmd[@]}" 2>&1)"; then
+        rm -f "$batch_file"
+        printf 'compute monitor: sbatch failed for %s on %s: %s\n' "$partition" "$node" "$submit_output" >&2
+        return 1
+    fi
+    rm -f "$batch_file"
     return 0
 }
 
@@ -708,6 +792,63 @@ cmd_allocate() {
     fi
 }
 
+cmd_cycle() {
+    _resolve_target_partitions
+
+    printf 'compute monitor cycle: partitions=%s interval=%ss job_time=%s max_nodes_per_cycle=%s\n' \
+        "${TARGET_PARTITIONS[*]}" "$CYCLE_INTERVAL" "$CYCLE_JOB_TIME" "$CYCLE_MAX_NODES"
+
+    declare -A busy_nodes
+    while true; do
+        printf '\n[%s] starting cycle\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+
+        # Build set of nodes already covered by a pending/running cycle job
+        busy_nodes=()
+        local jname jnode
+        while IFS='|' read -r jname jnode; do
+            [[ "$jname" == "${ALLOC_JOB_NAME_PREFIX}-cycle-"* && -n "$jnode" ]] \
+                && busy_nodes["$jnode"]=1
+        done < <(squeue -u "${USER}" -h -o '%j|%N' 2>/dev/null)
+
+        mkdir -p "${OUTPUT_DIR}/slurm"
+
+        local submitted=0 skipped=0 failed=0
+        local total_submitted=0
+        local partition node
+        local available_nodes=()
+        for partition in "${TARGET_PARTITIONS[@]}"; do
+            if [[ "$total_submitted" -ge "$CYCLE_MAX_NODES" ]]; then
+                break
+            fi
+            mapfile -t available_nodes < <(_load_available_nodes_for_partition "$partition")
+            if [[ "${#available_nodes[@]}" -eq 0 ]]; then
+                printf '[%s] no nodes with >= 1 free CPU and >= 1 GB\n' "$partition"
+                continue
+            fi
+            printf '[%s] %d nodes eligible\n' "$partition" "${#available_nodes[@]}"
+            for node in "${available_nodes[@]}"; do
+                if [[ "$total_submitted" -ge "$CYCLE_MAX_NODES" ]]; then
+                    break
+                fi
+                if [[ -n "${busy_nodes[$node]+x}" ]]; then
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+                if _submit_node_job "$partition" "$node"; then
+                    submitted=$((submitted + 1))
+                    total_submitted=$((total_submitted + 1))
+                else
+                    failed=$((failed + 1))
+                fi
+            done
+        done
+
+        printf 'cycle summary: submitted=%s skipped_busy=%s failed=%s — next in %ss\n' \
+            "$submitted" "$skipped" "$failed" "$CYCLE_INTERVAL"
+        sleep "$CYCLE_INTERVAL"
+    done
+}
+
 cmd_start() {
     _require_running_job
     _load_nodes
@@ -836,13 +977,14 @@ cmd_tail() {
 
 case "${1:-}" in
     allocate) cmd_allocate ;;
+    cycle)    cmd_cycle ;;
     start)    cmd_start ;;
     stop)     cmd_stop ;;
     status)   cmd_status ;;
     once)     cmd_once ;;
     tail)     cmd_tail ;;
     *)
-        printf 'Usage: %s {allocate|start|stop|status|once|tail}\n' "$(basename "$0")" >&2
+        printf 'Usage: %s {allocate|cycle|start|stop|status|once|tail}\n' "$(basename "$0")" >&2
         exit 1
         ;;
 esac

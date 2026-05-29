@@ -1,130 +1,203 @@
 # Compute Node Monitor
 
-Launches a lightweight monitoring loop on compute nodes and writes snapshots to shared storage. It can either attach to an existing allocation or submit dedicated monitoring allocations across one partition, a list of partitions, or all visible partitions.
+Captures system snapshots on compute nodes and writes them to shared storage. Two operating modes:
+
+- **`cycle`** — submit short one-shot jobs every few minutes across all available nodes, collecting one snapshot per visit (minimal resource footprint, rotates across the cluster automatically)
+- **`allocate`** / **`start`** — submit long-running exclusive jobs that collect snapshots continuously at a fixed interval
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `compute_monitor.sh` | Per-node worker that captures process, compute, and IO snapshots |
-| `launch_monitor.sh` | Slurm-aware launcher/controller for existing or self-submitted monitor jobs |
+| `compute_monitor.sh` | Per-node worker: captures CPU, memory, IO, GPU, and process snapshots |
+| `launch_monitor.sh` | Slurm-aware launcher/controller for all operating modes |
 
-## Quick Start
+---
 
-### Existing Allocation
+## Cycle Mode (recommended for broad coverage)
 
-Run from inside the allocation or set `COMPUTE_MONITOR_JOB_ID` from a login node:
+Submits one-shot snapshot jobs to all available nodes in the target partitions, waits, then repeats. Each job requests one CPU per node (no `--exclusive`), runs a single snapshot (~10 s), then self-cancels. On each iteration, different nodes may be free, so coverage rotates **naturally** across the cluster.
+
+Default target partitions: `test`, `test_gpu`, `serial_requeue`, `gpu_requeue`.
 
 ```bash
-# Start one monitor task per compute node
-./launch_monitor.sh start
-
-# Check status on every node
-./launch_monitor.sh status
-
-# Tail today's logs
-./launch_monitor.sh tail
-
-# Stop the monitor
-./launch_monitor.sh stop
+# Run in a screen/tmux session — blocks and loops forever
+./launch_monitor.sh cycle
 ```
 
-### Allocate All Nodes In One Partition
-
-To have the monitor allocate its own nodes, set a partition and submit a dedicated monitoring job:
+Override partitions or timing:
 
 ```bash
-COMPUTE_MONITOR_PARTITION=gpu_h200 ./launch_monitor.sh allocate
-
-# Later, inspect or stop it
-./launch_monitor.sh status
-./launch_monitor.sh stop
+COMPUTE_MONITOR_PARTITION=gpu_requeue,serial_requeue \
+COMPUTE_MONITOR_CYCLE_INTERVAL=600 \
+./launch_monitor.sh cycle
 ```
 
-By default, `allocate` targets every node in the partition whose state is currently allocatable (`idle`, `mixed`, `allocated`, or `completing`) and asks Slurm for them as one exclusive job. That means the job may stay pending until the whole node set becomes available.
+What happens each iteration:
 
-When you do not set `COMPUTE_MONITOR_TIME`, the launcher now uses a cluster-safe default of `00:30:00`, and automatically stretches `intermediate` plus `bigmem_intermediate` to `3-00:01:00` because those partitions reject shorter jobs.
+1. Prune finished jobs from the state file
+2. For each target partition, find nodes in `idle`/`mixed`/`allocated`/`completing` state
+3. Submit `sbatch --cpus-per-task=1 --ntasks-per-node=1` to those nodes; the batch script runs `srun ... compute_monitor.sh once` then calls `scancel` to release the allocation immediately
+4. Sleep `CYCLE_INTERVAL` seconds (default 5 minutes), then repeat
 
-### Allocate Across Multiple Partitions
+---
 
-A single Slurm job does not actually run across every partition at once, so the launcher handles this by submitting one monitor job per target partition and tracking them together:
+## Allocate Mode (continuous monitoring on a fixed node set)
+
+Submits one long-running exclusive job per partition. Each job loops indefinitely, writing a snapshot every `COMPUTE_MONITOR_INTERVAL` seconds (default 60 s).
 
 ```bash
-# One job for each listed partition
+# Submit monitor jobs for the default four partitions
+./launch_monitor.sh allocate
+
+# Explicit partition list
 COMPUTE_MONITOR_PARTITION=gpu_h200,gpu_test ./launch_monitor.sh allocate
 
-# One job for every visible partition
+# Every visible partition
 COMPUTE_MONITOR_PARTITION=all ./launch_monitor.sh allocate
 
-# Aggregate status / stop across all tracked monitor jobs
+# Exclude some partitions when using "all"
+COMPUTE_MONITOR_PARTITION=all \
+COMPUTE_MONITOR_EXCLUDE_PARTITIONS=remoteviz,bigmem \
+./launch_monitor.sh allocate
+```
+
+Inspect or stop the running allocations:
+
+```bash
 ./launch_monitor.sh status
+./launch_monitor.sh tail
 ./launch_monitor.sh stop
 ```
 
-When `COMPUTE_MONITOR_PARTITION=all`, the script discovers visible partitions with `sinfo`, filters out duplicates, and then submits one allocation per partition. If one partition cannot be allocated, the others can still be submitted.
+---
+
+## Start Mode (attach to an existing allocation)
+
+Run the monitor inside an allocation you already hold. Invoke from within the job, or set `COMPUTE_MONITOR_JOB_ID` from a login node.
+
+```bash
+./launch_monitor.sh start
+
+./launch_monitor.sh status
+./launch_monitor.sh tail
+./launch_monitor.sh stop
+```
+
+Take a single snapshot without starting the background loop:
+
+```bash
+./launch_monitor.sh once
+```
+
+---
 
 ## Output
 
-Logs are written to:
-
-```text
-scripts/monitor/compute/logs/job_<jobid>/YYYY-MM-DD/<hostname>.log
+```
+logs/
+  job_<jobid>/
+    YYYY-MM-DD/
+      <partition>_<hostname>.log    # one file per node per day; partition prefix from $SLURM_JOB_PARTITION
+  slurm/
+    cycle_<jobid>.out   # stdout from cycle batch jobs
+    cycle_<jobid>.err   # stderr from cycle batch jobs
+    alloc_<jobid>.out   # stdout from allocate batch jobs
+    alloc_<jobid>.err   # stderr from allocate batch jobs
 ```
 
-Each snapshot includes:
+Each snapshot section includes:
 
-- Uptime and load average
-- Memory usage
-- Per-core CPU utilization from `mpstat`
-- Local disk IO from `iostat`
-- NFS IO from `nfsiostat`
-- GPU utilization and GPU process snapshots from `nvidia-smi`
-- Full process table from `ps`
-- Per-process IO from `pidstat`
+| Section | Tool | Notes |
+|---------|------|-------|
+| Uptime / load average | `uptime` | |
+| Memory | `free -h` | |
+| Per-core CPU | `mpstat -P ALL 1 1` | 1-second real interval |
+| Local disk IO | `iostat -xz 1 2` | 1-second real interval, second sample only |
+| NFS IO | `nfsiostat 1 2` | 1-second real interval — ops/s, kB/s, RTT, queue latency |
+| NFS RPC retransmits | `/proc/net/rpc/nfs` | Cumulative since mount |
+| NFS mountstats | `/proc/self/mountstats` | Cumulative RTT breakdown, bad_xid, slot backlog |
+| D-state processes | `ps` | Processes blocked in uninterruptible IO wait |
+| GPU summary | `nvidia-smi` | Utilization, memory, power, clocks per GPU |
+| GPU process utilization | `nvidia-smi pmon` | Per-GPU per-process utilization |
+| GPU compute apps | `nvidia-smi query-compute-apps` | Active CUDA processes and memory usage |
+| All processes by CPU | `ps` | Full process table sorted by CPU% |
+| Per-process IO | `pidstat -dhl 1 1` | 1-second real interval |
+| System file descriptors | `/proc/sys/fs/file-nr` | |
+
+---
 
 ## Environment Variables
 
+### Job targeting
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COMPUTE_MONITOR_JOB_ID` | `SLURM_JOB_ID` or the remembered monitor job | Slurm job to monitor |
-| `COMPUTE_MONITOR_NODES` | all nodes in the job | Optional space-separated subset of nodes |
-| `COMPUTE_MONITOR_OUTPUT_DIR` | `scripts/monitor/compute/logs` | Root directory for logs |
-| `COMPUTE_MONITOR_PID_DIR` | `~/.run` | Directory for per-node pid files |
-| `COMPUTE_MONITOR_INTERVAL` | `60` | Seconds between snapshots |
-| `COMPUTE_MONITOR_PARTITION` | unset | Partition name, comma-separated partition list, or `all` for `allocate` |
-| `COMPUTE_MONITOR_ACCOUNT` | unset | Optional Slurm account for `allocate` |
-| `COMPUTE_MONITOR_QOS` | unset | Optional Slurm QOS for `allocate` |
-| `COMPUTE_MONITOR_TIME` | `00:30:00` | Optional time limit for `allocate`; `intermediate` and `bigmem_intermediate` are automatically raised when unset |
-| `COMPUTE_MONITOR_CONSTRAINT` | unset | Optional Slurm constraint for `allocate` |
-| `COMPUTE_MONITOR_RESERVATION` | unset | Optional Slurm reservation for `allocate` |
-| `COMPUTE_MONITOR_EXCLUDE` | unset | Optional node exclude list for `allocate` |
-| `COMPUTE_MONITOR_EXCLUDE_PARTITIONS` | unset | Optional comma-separated partition names to skip when using a list or `all` |
-| `COMPUTE_MONITOR_ALLOCATE_NODELIST` | unset | Optional explicit Slurm nodelist expression instead of “all eligible nodes” |
-| `COMPUTE_MONITOR_STATE_FILE` | `~/.run/compute_monitor_jobs.tsv` | Tracks the monitor allocations submitted by `allocate` |
-| `COMPUTE_MONITOR_GPUS_PER_NODE` | `1` | GPU request automatically added on GPU partitions |
-| `COMPUTE_MONITOR_BIGMEM_MIN_MEMORY` | `1001G` | Memory request automatically added on `bigmem*` partitions |
+| `COMPUTE_MONITOR_JOB_ID` | `$SLURM_JOB_ID` or auto-detected | Slurm job to attach to (`start`/`once`/`stop`/`status`/`tail`) |
+| `COMPUTE_MONITOR_NODES` | all nodes in the job | Space-separated subset of nodes to monitor |
+| `COMPUTE_MONITOR_PARTITION` | `test,test_gpu,serial_requeue,gpu_requeue` | Partition(s) for `allocate`/`cycle`; use `all` for every visible partition |
+| `COMPUTE_MONITOR_EXCLUDE_PARTITIONS` | unset | Comma-separated partitions to skip when using a list or `all` |
+| `COMPUTE_MONITOR_ALLOCATE_NODELIST` | unset | Explicit nodelist expression instead of all eligible nodes (single partition only) |
 
-Example:
+### Snapshot collection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPUTE_MONITOR_INTERVAL` | `60` | Seconds between snapshots in daemon/allocate mode |
+| `COMPUTE_MONITOR_OUTPUT_DIR` | `logs/` next to the script | Root directory for log files |
+| `COMPUTE_MONITOR_PID_DIR` | `~/.run` | Directory for per-node PID files |
+
+### Cycle mode
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPUTE_MONITOR_CYCLE_INTERVAL` | `300` | Seconds between cycle iterations (5 minutes) |
+| `COMPUTE_MONITOR_CYCLE_JOB_TIME` | `00:05:00` | Slurm time limit for each one-shot cycle job |
+
+### Allocate mode (sbatch options)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPUTE_MONITOR_TIME` | `00:30:00` | Time limit for allocate jobs; `intermediate`/`bigmem_intermediate` auto-raised to `3-00:01:00` |
+| `COMPUTE_MONITOR_ACCOUNT` | unset | Slurm account (`--account`) |
+| `COMPUTE_MONITOR_QOS` | unset | Slurm QOS (`--qos`) |
+| `COMPUTE_MONITOR_CONSTRAINT` | unset | Slurm constraint (`--constraint`) |
+| `COMPUTE_MONITOR_RESERVATION` | unset | Slurm reservation (`--reservation`) |
+| `COMPUTE_MONITOR_EXCLUDE` | unset | Node exclude list (`--exclude`) |
+| `COMPUTE_MONITOR_GPUS_PER_NODE` | `1` | GPU count added automatically on GPU partitions |
+| `COMPUTE_MONITOR_BIGMEM_MIN_MEMORY` | `1001G` | Memory added automatically on `bigmem*` partitions (allocate only) |
+| `COMPUTE_MONITOR_STATE_FILE` | `~/.run/compute_monitor_jobs.tsv` | Tracks submitted allocate/cycle jobs |
+| `COMPUTE_MONITOR_ALLOC_JOB_NAME_PREFIX` | `compute-monitor-alloc` | Prefix for submitted job names |
+
+---
+
+## Examples
 
 ```bash
-COMPUTE_MONITOR_JOB_ID=123456 \
-COMPUTE_MONITOR_INTERVAL=30 \
-./launch_monitor.sh start
+# Cycle across the default four partitions, every 10 minutes
+COMPUTE_MONITOR_CYCLE_INTERVAL=600 ./launch_monitor.sh cycle
 
+# Continuous monitoring on a GPU partition for 4 hours
 COMPUTE_MONITOR_PARTITION=gpu_h200 \
 COMPUTE_MONITOR_TIME=04:00:00 \
 ./launch_monitor.sh allocate
 
-COMPUTE_MONITOR_PARTITION=all \
-COMPUTE_MONITOR_EXCLUDE_PARTITIONS=remoteviz,test \
-COMPUTE_MONITOR_TIME=02:00:00 \
-./launch_monitor.sh allocate
+# Attach to an existing job and snapshot every 30 seconds
+COMPUTE_MONITOR_JOB_ID=123456 \
+COMPUTE_MONITOR_INTERVAL=30 \
+./launch_monitor.sh start
+
+# Tail today's logs across all tracked jobs
+./launch_monitor.sh tail
 ```
 
-## One-Off Snapshots
+---
 
-To capture a single snapshot on every node without starting the background loop:
+## Log Rotation
+
+Logs accumulate indefinitely. To prune files older than 30 days:
 
 ```bash
-./launch_monitor.sh once
+find logs -name "*.log" -mtime +30 -delete
+find logs -type d -empty -delete
 ```

@@ -162,8 +162,9 @@ def parse_nfsiostat(s):
             in_second = mp in seen
             seen[mp] = True
             cur = {'mountpoint': mp, 'ops_s': 0.0,
-                   'rd_kb_s': 0.0, 'rd_rtt_ms': 0.0,
-                   'wr_kb_s': 0.0, 'wr_rtt_ms': 0.0} if in_second else None
+                   'rd_kb_s': 0.0, 'rd_rtt_ms': 0.0, 'rd_exe_ms': 0.0, 'rd_retrans': 0,
+                   'wr_kb_s': 0.0, 'wr_rtt_ms': 0.0, 'wr_exe_ms': 0.0, 'wr_retrans': 0,
+                   } if in_second else None
             state = None
             continue
         if cur is None:
@@ -179,20 +180,109 @@ def parse_nfsiostat(s):
             state = 'read'
         elif state == 'read' and ls and (ls[0].isdigit() or ls[0] == '-'):
             p = ls.split()
-            cur['rd_kb_s']   = _float(p[1]) or 0.0
-            cur['rd_rtt_ms'] = _float(p[5]) or 0.0
+            # columns: ops/s  kB/s  kB/op  retrans  [retrans%]  avg_rtt  avg_exe
+            # retrans may be "0 (0.0%)" (2 tokens) or just "0" — use -2/-1 for rtt/exe
+            cur['rd_kb_s']    = _float(p[1]) or 0.0
+            cur['rd_retrans'] = _int(p[3]) or 0
+            cur['rd_rtt_ms']  = _float(p[-2]) or 0.0
+            cur['rd_exe_ms']  = _float(p[-1]) or 0.0
             state = None
         elif ls.startswith('write:'):
             state = 'write'
         elif state == 'write' and ls and (ls[0].isdigit() or ls[0] == '-'):
             p = ls.split()
-            cur['wr_kb_s']   = _float(p[1]) or 0.0
-            cur['wr_rtt_ms'] = _float(p[5]) or 0.0
+            cur['wr_kb_s']    = _float(p[1]) or 0.0
+            cur['wr_retrans'] = _int(p[3]) or 0
+            cur['wr_rtt_ms']  = _float(p[-2]) or 0.0
+            cur['wr_exe_ms']  = _float(p[-1]) or 0.0
             if cur['ops_s'] > 0.005:
                 mounts.append(cur)
             cur = None
             state = None
     return sorted(mounts, key=lambda x: x['ops_s'], reverse=True)
+
+
+def parse_mountstats():
+    """Cumulative NFS retransmits, bad_xid, slot backlog, and RTT breakdown."""
+    try:
+        with open('/proc/self/mountstats') as f:
+            text = f.read()
+    except Exception:
+        return []
+    mounts, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r'device\s+\S+\s+mounted on\s+(\S+)\s+with fstype\s+(nfs\S*)', line)
+        if m:
+            cur = {'mountpoint': m.group(1), 'fstype': m.group(2),
+                   'bad_xid': 0, 'backlog_u': 0.0}
+            mounts.append(cur)
+            continue
+        if cur is None:
+            continue
+        ls = line.strip()
+        # xprt: tcp srcport bind_cnt conn_cnt conn_time idle_time sends recvs bad_xids req_u backlog_u
+        if ls.startswith('xprt:') and 'tcp' in ls:
+            p = ls.split()
+            try:
+                cur['bad_xid']  = int(p[9])
+                cur['backlog_u'] = float(p[11]) if len(p) > 11 else 0.0
+            except (ValueError, IndexError):
+                pass
+        # per-op: OP: ops retrans bytes_sent bytes_recv queue_ms rtt_ms exe_ms
+        for op_tag, op_key in (('READ:', 'read'), ('WRITE:', 'write')):
+            if ls.startswith(op_tag):
+                p = ls.split()
+                if len(p) >= 8:
+                    try:
+                        ops = int(p[1])
+                        if ops > 0:
+                            cur[op_key] = {
+                                'ops':          ops,
+                                'retrans':      int(p[2]),
+                                'avg_queue_ms': round(int(p[5]) / ops, 2),
+                                'avg_rtt_ms':   round(int(p[6]) / ops, 2),
+                                'avg_exe_ms':   round(int(p[7]) / ops, 2),
+                            }
+                    except (ValueError, IndexError):
+                        pass
+    return [m for m in mounts if m.get('fstype', '').startswith('nfs')]
+
+
+def parse_nfs_rpc():
+    """NFS client-level RPC call and retransmit counts from /proc/net/rpc/nfs."""
+    try:
+        with open('/proc/net/rpc/nfs') as f:
+            text = f.read()
+    except Exception:
+        return {}
+    for line in text.splitlines():
+        if line.startswith('rpc '):
+            p = line.split()
+            if len(p) >= 3:
+                return {
+                    'calls':           int(p[1]),
+                    'retransmissions': int(p[2]),
+                    'auth_refreshes':  int(p[3]) if len(p) > 3 else 0,
+                }
+    return {}
+
+
+def parse_d_state_procs(s):
+    """Processes blocked in uninterruptible I/O wait (D state)."""
+    procs = []
+    for line in s.splitlines():
+        p = line.split(None, 3)
+        if len(p) >= 4 and p[1].startswith('D'):
+            try:
+                procs.append({
+                    'pid':  int(p[0]),
+                    'stat': p[1],
+                    'user': p[2],
+                    'args': p[3][:200],
+                })
+            except (ValueError, IndexError):
+                pass
+    return procs
 
 def parse_sar_dev(s):
     ifaces = []
@@ -325,16 +415,17 @@ with ThreadPoolExecutor(max_workers=8) as ex:
     f_nfsiostat  = ex.submit(run, ['nfsiostat', '5', '2'])
 
     # instant reads while timed commands run
-    uptime_out   = run(['uptime'])
-    w_out        = run(['w'])
-    ps_state_out = run(['ps', '-e', '--no-headers', '-o', 'stat'])
-    free_out     = run(['free', '-b'])
-    ss_out       = run(['ss', '-s'])
-    ps_cpu_out   = run(['ps', '-eo', 'pid,user,%cpu,%mem,rss,stat,start,time,args',
-                        '--sort=-%cpu', '--no-headers'])
-    ps_rss_out   = run(['ps', '-eo', 'pid,user,%cpu,%mem,rss,stat,start,time,args',
-                        '--sort=-rss', '--no-headers'])
-    ps_user_out  = run(['ps', '-eo', 'user,%cpu,rss', '--no-headers'])
+    uptime_out    = run(['uptime'])
+    w_out         = run(['w'])
+    ps_state_out  = run(['ps', '-e', '--no-headers', '-o', 'stat'])
+    free_out      = run(['free', '-b'])
+    ss_out        = run(['ss', '-s'])
+    ps_cpu_out    = run(['ps', '-eo', 'pid,user,%cpu,%mem,rss,stat,start,time,args',
+                         '--sort=-%cpu', '--no-headers'])
+    ps_rss_out    = run(['ps', '-eo', 'pid,user,%cpu,%mem,rss,stat,start,time,args',
+                         '--sort=-rss', '--no-headers'])
+    ps_user_out   = run(['ps', '-eo', 'user,%cpu,rss', '--no-headers'])
+    ps_dstate_out = run(['ps', 'axo', 'pid,stat,user,args', '--no-headers'])
     try:
         fds_out = open('/proc/sys/fs/file-nr').read().strip()
     except Exception:
@@ -351,8 +442,11 @@ snapshot = {
     'vmstat':             parse_vmstat(f_vmstat.result()),
     'local_disk_io':      parse_iostat(f_iostat.result()),
     'nfs_io':             parse_nfsiostat(f_nfsiostat.result()),
+    'nfs_mountstats':     parse_mountstats(),
+    'nfs_rpc':            parse_nfs_rpc(),
     'network_io':         parse_sar_dev(f_sar.result()),
     'socket_summary':     parse_ss(ss_out),
+    'd_state_procs':      parse_d_state_procs(ps_dstate_out),
     'per_user_resources': parse_per_user(ps_user_out, top_n),
     'top_cpu_processes':  parse_ps(ps_cpu_out, top_n),
     'top_rss_processes':  parse_ps(ps_rss_out, top_n),
