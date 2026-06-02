@@ -17,14 +17,15 @@ JOB_NAME=""
 NODE_COUNT=1
 CPU_CORE=16
 MEM_GB=256
-GPU_TYPE="h100"
+GPU_TYPE=""
 GPU_COUNT=1
 TIMEOUT_HOURS=12
 PARTITION="best"
 
 usage() {
-  echo "usage: $0 [-j JOB_NAME] [-n NODES] [-c CPU_CORE] [-m MEM_GB] [-u GPU_TYPE] [-g GPU_COUNT] [-t TIMEOUT_HOURS] [-p PARTITION] SCRIPT [SCRIPT_ARGS...]"
-  echo "default values: JOB_NAME derived, NODES=1, CPU_CORE=16, MEM_GB=256, GPU_TYPE=h100, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
+  echo "usage: $0 [-j JOB_NAME] [-n NODES] [-c CPU_CORE] [-m MEM_GB] [-u GPU_TYPE] [-g GPU_COUNT] [-t TIMEOUT_HOURS] [-p PARTITION] [SCRIPT [SCRIPT_ARGS...]]"
+  echo "default values: JOB_NAME derived, NODES=1, CPU_CORE=16, MEM_GB=256, GPU_TYPE=any, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
+  echo "if SCRIPT is omitted, a placeholder that sleeps 7 days is submitted"
   echo "example: $0 -n 2 -c 64 -m 512 -g 4 -u h200 -t 24 train.sh --config cfg.yaml"
   echo "gpu types: $(slurm_tools_gpu_types_help)"
   echo ""
@@ -33,7 +34,7 @@ usage() {
   echo "  -n NODES           Number of nodes (default: 1)"
   echo "  -c CPU_CORE        CPU cores per node (default: 16)"
   echo "  -m MEM_GB          Memory per node in GB (default: 256)"
-  echo "  -u GPU_TYPE        GPU type (default: h100)"
+  echo "  -u GPU_TYPE        GPU type (default: any GPU type)"
   echo "  -g GPU_COUNT       GPUs per node (default: 1; use 0 for CPU-only)"
   echo "  -t TIMEOUT_HOURS   Timeout in hours (default: 12)"
   echo "  -p PARTITION       Partition (default: best; uses best_partition when best)"
@@ -61,17 +62,18 @@ while getopts "vhj:n:c:m:g:u:t:p:" opt; do
 done
 shift $((OPTIND - 1))
 
+USED_PLACEHOLDER=0
 if [[ $# -lt 1 ]]; then
-  echo "error: SCRIPT is required" >&2
-  usage
-fi
-
-SCRIPT="$1"
-shift
-
-if [[ ! -f "$SCRIPT" ]]; then
-  slurm_tools_print_log "script not found: ${SCRIPT}"
-  exit 1
+  SCRIPT="$(slurm_tools_dummy_script)"
+  USED_PLACEHOLDER=1
+  slurm_tools_print_log "no script provided; using placeholder that sleeps 7 days so you can log in to the node once it starts: ${SCRIPT}"
+else
+  SCRIPT="$1"
+  shift
+  if [[ ! -f "$SCRIPT" ]]; then
+    slurm_tools_print_log "script not found: ${SCRIPT}"
+    exit 1
+  fi
 fi
 
 if [[ "$SCRIPT" == /* ]]; then
@@ -96,7 +98,7 @@ if [[ "$PARTITION_WAS_BEST" -eq 1 ]]; then
   slurm_tools_print_log "best partition: ${PARTITION}"
 fi
 
-slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}, SCRIPT=${SCRIPT}"
+slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE:-any}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}, SCRIPT=${SCRIPT}"
 
 TIMEOUT_STRING="$(slurm_tools_timeout_string "$TIMEOUT_HOURS")"
 
@@ -122,3 +124,21 @@ if ! slurm_tools_sbatch -p "${PARTITION}" \
   exit 1
 fi
 slurm_tools_print_log "submitted job_id: ${SLURM_TOOLS_JOB_ID}"
+
+if [[ "$USED_PLACEHOLDER" -eq 1 ]]; then
+  slurm_tools_print_log "waiting for placeholder to start so it can report node hostnames (Ctrl+C stops waiting; the job keeps running)"
+  printf '\n'
+  if slurm_tools_wait_for_allocation "${SLURM_TOOLS_JOB_ID}" "${JOB_NAME}"; then
+    printf '\n'
+    NODELIST="$(slurm_tools_job_nodelist "${SLURM_TOOLS_JOB_ID}")"
+    mapfile -t HOSTS < <(scontrol show hostnames "${NODELIST}" 2>/dev/null)
+    slurm_tools_print_log "node hostnames: ${HOSTS[*]}"
+    for h in "${HOSTS[@]}"; do
+      slurm_tools_print_log "  ssh ${h}"
+    done
+    slurm_tools_print_log "or attach to the job with: srun --jobid ${SLURM_TOOLS_JOB_ID} --pty bash"
+  else
+    printf '\n'
+    slurm_tools_print_log "placeholder ${SLURM_TOOLS_JOB_ID} not running yet; once RUNNING get hostnames with: scontrol show hostnames \$(squeue -h -j ${SLURM_TOOLS_JOB_ID} -o %N)"
+  fi
+fi

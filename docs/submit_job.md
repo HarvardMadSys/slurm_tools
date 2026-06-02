@@ -21,14 +21,16 @@ slurm-submit -c 8 -m 64 -g 0 -p serial cpu_job.sh
 | `-n` | NODES | `1` | Number of nodes |
 | `-c` | CPU_CORE | `16` | CPU cores per node |
 | `-m` | MEM_GB | `256` | Memory per node (GB) |
-| `-u` | GPU_TYPE | `h100` | Short GPU name (see [alloc.sh.md](alloc.sh.md)) |
+| `-u` | GPU_TYPE | any | Short GPU name (see [alloc.sh.md](alloc.sh.md)); omit to allow any GPU type |
 | `-g` | GPU_COUNT | `1` | GPUs per node (`0` for CPU-only) |
 | `-t` | TIMEOUT_HOURS | `12` | Wall time (hours) |
 | `-p` | PARTITION | `best` | Partition or `best` |
 | `-v` | | | Show version |
 | `-h` | | | Help |
 
-Positional: `SCRIPT` (required), then arguments passed to the batch script.
+Positional: `SCRIPT` (optional), then arguments passed to the batch script. If `SCRIPT` is omitted, slurm-submit generates a placeholder script that sleeps 7 days (held at `~/.cache/slurm_tools/dummy_sleep.sh`) and submits that instead — useful for grabbing an allocation you'll log in to. In this case slurm-submit then **waits** for the job to start (like `slurm-alloc`) and prints the allocated node hostnames plus a ready-to-use `ssh <host>` line for each; you can also `srun --jobid <job_id> --pty bash`. Ctrl+C stops waiting without cancelling the job. Slurm kills the placeholder at the job time limit (`-t`).
+
+When `SCRIPT` is provided, behaviour is unchanged: slurm-submit prints the job ID and exits without waiting.
 
 ## Notes
 

@@ -16,11 +16,11 @@ slurm-alloc -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
 
 | Flag | Parameter | Default | Description |
 |------|-----------|---------|-------------|
-| `-j` | JOB_NAME | derived | `whoami` if `-g 0`, else `${GPU_COUNT}${GPU_TYPE}` |
+| `-j` | JOB_NAME | derived | `whoami` if `-g 0`, else `${GPU_COUNT}${GPU_TYPE}` (`${GPU_COUNT}gpu` when no type) |
 | `-n` | NODES | `1` | Number of nodes |
 | `-c` | CPU_CORE | `16` | CPU cores per node |
 | `-m` | MEM_GB | `256` | Memory per node (GB) |
-| `-u` | GPU_TYPE | `h100` | Short GPU name (see below) |
+| `-u` | GPU_TYPE | any | Short GPU name (see below); omit to allow any GPU type |
 | `-g` | GPU_COUNT | `1` | GPUs per node (`0` for CPU-only) |
 | `-t` | TIMEOUT_HOURS | `12` | Wall time (hours; `>23` becomes `D-HH:00:00`) |
 | `-p` | PARTITION | `best` | Partition or `best` for `best_partition` |

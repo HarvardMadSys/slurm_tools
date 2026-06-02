@@ -88,7 +88,7 @@ slurm_tools_default_job_name() {
   if [[ "$gpu_count" -eq 0 ]]; then
     whoami
   else
-    printf '%s%s' "$gpu_count" "$gpu_type"
+    printf '%s%s' "$gpu_count" "${gpu_type:-gpu}"
   fi
 }
 
@@ -113,6 +113,11 @@ slurm_tools_build_gres_args() {
   local short_type="$1" count="$2" full
   GRES_ARGS=()
   [[ "$count" -gt 0 ]] || return 0
+  # No GPU type given: request any GPU type.
+  if [[ -z "$short_type" ]]; then
+    GRES_ARGS=(--gres=gpu:"${count}")
+    return 0
+  fi
   if ! full="$(slurm_tools_map_gpu_type "$short_type")"; then
     return 1
   fi
@@ -138,7 +143,9 @@ slurm_tools_resolve_partition() {
       printf '%s' "$mig_part"
       return 0
     fi
-    bp_gpu_args=(--gpu-type "$gpu_type" -g "$total_gpu")
+    bp_gpu_args=(-g "$total_gpu")
+    # Only constrain by type when one was given; empty means any GPU type.
+    [[ -n "$gpu_type" ]] && bp_gpu_args+=(--gpu-type "$gpu_type")
   fi
 
   local result
@@ -230,4 +237,24 @@ slurm_tools_alloc_script() {
     return 0
   fi
   printf '%s' "/n/holylabs/juncheng_lab/Lab/software/scripts/sleep.sh"
+}
+
+# Path to a generated placeholder script that sleeps for 7 days. Used by
+# slurm-submit when no SCRIPT is given. Created on first use under the user
+# cache dir so it persists at a stable absolute path while the job queues/runs.
+slurm_tools_dummy_script() {
+  local cache_dir="${HOME}/.cache/slurm_tools"
+  local script="${cache_dir}/dummy_sleep.sh"
+  if [[ ! -f "$script" ]]; then
+    mkdir -p "$cache_dir"
+    cat >"$script" <<'EOF'
+#!/bin/bash
+# Auto-generated placeholder by slurm-submit (no script provided).
+# Holds the allocation by sleeping; Slurm kills it at the job time limit.
+echo "slurm-submit placeholder: sleeping 7 days on $(hostname)"
+sleep 7d
+EOF
+    chmod +x "$script"
+  fi
+  printf '%s' "$script"
 }

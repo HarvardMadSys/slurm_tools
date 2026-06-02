@@ -16,7 +16,7 @@ job_id=""
 
 usage() {
   echo "usage: $0 [-j JOB_NAME] [-n NODES] [-c CPU_CORE] [-m MEM_GB] [-u GPU_TYPE] [-g GPU_COUNT] [-t TIMEOUT_HOURS] [-p PARTITION]"
-  echo "default values: JOB_NAME=$(whoami) or \${GPU_COUNT}\${GPU_TYPE}, NODES=1, CPU_CORE=16, MEM_GB=256, GPU_TYPE=h100, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
+  echo "default values: JOB_NAME=$(whoami) or \${GPU_COUNT}\${GPU_TYPE}, NODES=1, CPU_CORE=16, MEM_GB=256, GPU_TYPE=any, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
   echo "example: $0 -n 2 -c 64 -m 512 -g 4 -u h200 -t 24"
   echo "gpu types: $(slurm_tools_gpu_types_help)"
   echo ""
@@ -28,7 +28,7 @@ usage() {
   echo "  -n NODES           Number of nodes (default: 1)"
   echo "  -c CPU_CORE        CPU cores per node (default: 16)"
   echo "  -m MEM_GB          Memory per node in GB (default: 256)"
-  echo "  -u GPU_TYPE        GPU type (default: h100)"
+  echo "  -u GPU_TYPE        GPU type (default: any GPU type)"
   echo "  -g GPU_COUNT       GPUs per node (default: 1)"
   echo "  -t TIMEOUT_HOURS   Timeout in hours (default: 12)"
   echo "  -p PARTITION       Partition (default: best)"
@@ -51,7 +51,7 @@ JOB_NAME=""
 NODE_COUNT=1
 CPU_CORE=16
 MEM_GB=256
-GPU_TYPE="h100"
+GPU_TYPE=""
 GPU_COUNT=1
 TIMEOUT_HOURS=12
 PARTITION="best"
@@ -89,7 +89,7 @@ if [[ "$PARTITION_WAS_BEST" -eq 1 ]]; then
   slurm_tools_print_log "best partition: ${PARTITION}"
 fi
 
-slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}"
+slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE:-any}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}"
 
 TIMEOUT_STRING="$(slurm_tools_timeout_string "$TIMEOUT_HOURS")"
 
