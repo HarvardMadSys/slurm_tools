@@ -212,7 +212,7 @@ print_st_usage() {
   st partition -c 4 -m 8                  # recommend lowest-cost partition for a job (4 cores and 8GB DRAM)
   st nodes -p gpu_requeue                 # available GPU/CPU/memory per node (find nodes for allocation)
   st alloc -c 16 -m 256 -g 1 -G h100      # grab an interactive allocation
-  st submit -c 16 -m 256 -g 1 train.sh    # run a script on a new allocation
+  st submit -c 16 -m 256 train.sh    # run a script on a new allocation
   st upgrade --check                      # check for updates
 
   Flags mirror sbatch: -N nodes, -J job-name, -c cpus, -G gpu-type, -t hours, -p partition.
