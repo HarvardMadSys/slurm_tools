@@ -3,7 +3,7 @@
 Monitor CPU and memory usage of processes for a specific SLURM job. The script gets the node list from the job ID and SSH to each node to collect process information for your user.
 
 Installed command: `st monitor`. The examples below use the repository script path
-`./node_monitor.py`.
+`./libexec/monitor.py`.
 
 ## Features
 
@@ -23,22 +23,22 @@ Installed command: `st monitor`. The examples below use the repository script pa
 ### Basic Usage (Specify job ID)
 ```bash
 # Monitor processes for a specific job
-./node_monitor.py 12345678
+./libexec/monitor.py 12345678
 
 # Filter processes (only show Python processes)
-./node_monitor.py 12345678 --filter python
+./libexec/monitor.py 12345678 --filter python
 
 # Filter GPU-related processes
-./node_monitor.py 12345678 --filter nvidia
+./libexec/monitor.py 12345678 --filter nvidia
 ```
 
 ### JSON Output
 ```bash
 # Get JSON output for programmatic use (includes process details)
-./node_monitor.py 12345678 --json
+./libexec/monitor.py 12345678 --json
 
 # JSON with filtering
-./node_monitor.py 12345678 --json --filter python
+./libexec/monitor.py 12345678 --json --filter python
 ```
 
 ## Command Line Options
@@ -126,7 +126,7 @@ Total Memory: 9379.3 MB
 
 ### Monitor a Specific Job
 ```bash
-$ ./node_monitor.py 12345678
+$ ./libexec/monitor.py 12345678
 Monitoring job 12345678 for user: juncheng
 Getting nodes for job 12345678...
 Found 2 nodes: holygpu8a16101, holygpu8a16102
@@ -148,7 +148,7 @@ Total Memory: 18687.3 MB
 
 ### Filter Specific Processes
 ```bash
-$ ./node_monitor.py 12345678 --filter python
+$ ./libexec/monitor.py 12345678 --filter python
 Monitoring job 12345678 for user: juncheng
 Getting nodes for job 12345678...
 Found 2 nodes: holygpu8a16101, holygpu8a16102
@@ -186,7 +186,7 @@ Total Memory: 13357.5 MB
    - The script has a 30-second timeout per node
 
 3. **Permission denied**
-   - Make sure the script is executable: `chmod +x node_monitor.py`
+   - Make sure the script is executable: `chmod +x libexec/monitor.py`
    - Ensure you have SSH access to compute nodes
 
 4. **No processes found**
@@ -214,27 +214,27 @@ Total Memory: 13357.5 MB
 
 ```bash
 # Monitor only Python processes for a job
-./node_monitor.py 12345678 --filter python
+./libexec/monitor.py 12345678 --filter python
 
 # Monitor GPU-related processes
-./node_monitor.py 12345678 --filter nvidia
+./libexec/monitor.py 12345678 --filter nvidia
 
 # Monitor machine learning frameworks
-./node_monitor.py 12345678 --filter torch      # PyTorch processes
-./node_monitor.py 12345678 --filter tensorflow # TensorFlow processes
+./libexec/monitor.py 12345678 --filter torch      # PyTorch processes
+./libexec/monitor.py 12345678 --filter tensorflow # TensorFlow processes
 
 # Monitor specific applications
-./node_monitor.py 12345678 --filter jupyter    # Jupyter processes
-./node_monitor.py 12345678 --filter code       # VS Code processes
-./node_monitor.py 12345678 --filter ssh        # SSH processes
+./libexec/monitor.py 12345678 --filter jupyter    # Jupyter processes
+./libexec/monitor.py 12345678 --filter code       # VS Code processes
+./libexec/monitor.py 12345678 --filter ssh        # SSH processes
 
 # Case-insensitive matching examples:
-./node_monitor.py 12345678 --filter PYTHON     # matches "python", "Python", "python3"
-./node_monitor.py 12345678 --filter cuda       # matches "cuda", "CUDA", "cudamallocasync"
-./node_monitor.py 12345678 --filter mpi        # matches "mpi", "MPI", "mpirun", "mpiexec"
+./libexec/monitor.py 12345678 --filter PYTHON     # matches "python", "Python", "python3"
+./libexec/monitor.py 12345678 --filter cuda       # matches "cuda", "CUDA", "cudamallocasync"
+./libexec/monitor.py 12345678 --filter mpi        # matches "mpi", "MPI", "mpirun", "mpiexec"
 
 # Combine with JSON output
-./node_monitor.py 12345678 --filter python --json  # Detailed Python processes in JSON
+./libexec/monitor.py 12345678 --filter python --json  # Detailed Python processes in JSON
 ```
 
 ## Integration with Existing Tools

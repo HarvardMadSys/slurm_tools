@@ -1,14 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
-_src="${BASH_SOURCE[0]}"
-while [[ -L "$_src" ]]; do
-  _target="$(readlink "$_src")"
-  [[ "$_target" == /* ]] && _src="$_target" || _src="$(cd "$(dirname "$_src")" && pwd)/$_target"
-done
-SLURM_TOOLS_SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
-unset _src _target
-# shellcheck source=lib/slurm_common.sh
+# Resolve the install root (repo top). When invoked via `st`, the dispatcher
+# exports SLURM_TOOLS_SCRIPT_DIR; otherwise derive it from this script's path
+# (one level up from libexec/).
+if [[ -z "${SLURM_TOOLS_SCRIPT_DIR:-}" ]]; then
+  _src="${BASH_SOURCE[0]}"
+  while [[ -L "$_src" ]]; do
+    _target="$(readlink "$_src")"
+    [[ "$_target" == /* ]] && _src="$_target" || _src="$(cd "$(dirname "$_src")" && pwd)/$_target"
+  done
+  SLURM_TOOLS_SCRIPT_DIR="$(cd "$(dirname "$_src")/.." && pwd)"
+  unset _src _target
+fi
+# shellcheck source=../lib/slurm_common.sh
 source "${SLURM_TOOLS_SCRIPT_DIR}/lib/slurm_common.sh"
 
 SLURM_TOOLS_VERSION="$(slurm_tools_read_version)"

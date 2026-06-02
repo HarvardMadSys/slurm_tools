@@ -229,7 +229,7 @@ def print_usage_table(node_usages: List[NodeUsage], process_filter: Optional[str
 
 def main():
     parser = argparse.ArgumentParser(
-        prog=os.environ.get("SLURM_TOOLS_PROG", "node_monitor"),
+        prog=os.environ.get("SLURM_TOOLS_PROG") or None,
         description="Monitor CPU/memory usage of processes for a specific SLURM job",
     )
     parser.add_argument("jobid", help="SLURM job ID to monitor")

@@ -46,12 +46,12 @@ Version is stored in `VERSION` at the install root. Upgrades replace the install
 
 | Command | Script | Purpose |
 |---------|--------|---------|
-| `st alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `st partition` when `-p best` |
-| `st submit` | `submit_job.sh` | Submit your batch script with the same flags; prints job ID |
-| `st partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
-| `st nodes` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
-| `st monitor` | `dep/node_monitor.py` | SSH to a job's nodes and show your processes |
-| `st upgrade` | `upgrade.sh` | Pull updates from GitHub |
+| `st alloc` | `libexec/alloc.sh` | Submit a placeholder job; auto-partition via `st partition` when `-p best` |
+| `st submit` | `libexec/submit.sh` | Submit your batch script with the same flags; prints job ID |
+| `st partition` | `libexec/partition.sh` | Recommend a partition from billing weights and available resources |
+| `st nodes` | `libexec/nodes.sh` | Table of unallocated GPU/CPU/memory per node |
+| `st monitor` | `libexec/monitor.py` | SSH to a job's nodes and show your processes |
+| `st upgrade` | `libexec/upgrade.sh` | Pull updates from GitHub |
 
 ## Quick start
 
@@ -84,15 +84,15 @@ Defaults target a Harvard FASRC-style cluster. Override with environment variabl
 
 | Tool | Doc |
 |------|-----|
-| `st partition` | [docs/best_partition.md](docs/best_partition.md) |
-| `st nodes` | [docs/print_alloc.md](docs/print_alloc.md) |
-| `st alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
-| `st submit` | [docs/submit_job.md](docs/submit_job.md) |
-| `st monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
+| `st partition` | [docs/partition.md](docs/partition.md) |
+| `st nodes` | [docs/nodes.md](docs/nodes.md) |
+| `st alloc` | [docs/alloc.md](docs/alloc.md) |
+| `st submit` | [docs/submit.md](docs/submit.md) |
+| `st monitor` | [docs/monitor.md](docs/monitor.md) |
 | environment variables | [docs/env.md](docs/env.md) |
 
 ## Notes on `st alloc`
 
-`alloc.sh` uses a cluster-specific default for the placeholder sleep script. Set `SLURM_TOOLS_ALLOC_SCRIPT` on other sites.
+`libexec/alloc.sh` uses a cluster-specific default for the placeholder sleep script. Set `SLURM_TOOLS_ALLOC_SCRIPT` on other sites.
 
 On each run, `st alloc` may auto-upgrade from GitHub (at most once per 24h). Disable with `SLURM_TOOLS_SKIP_UPGRADE=1`; force a check with `SLURM_TOOLS_FORCE_UPGRADE_CHECK=1`.

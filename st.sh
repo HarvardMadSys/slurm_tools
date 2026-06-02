@@ -45,27 +45,27 @@ shift || true
 case "$cmd" in
   alloc)
     export SLURM_TOOLS_PROG="st alloc"
-    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/alloc.sh" "$@"
+    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/libexec/alloc.sh" "$@"
     ;;
   submit)
     export SLURM_TOOLS_PROG="st submit"
-    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/submit_job.sh" "$@"
+    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/libexec/submit.sh" "$@"
     ;;
   partition | part)
     export SLURM_TOOLS_PROG="st partition"
-    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh" "$@"
+    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/libexec/partition.sh" "$@"
     ;;
   nodes)
     export SLURM_TOOLS_PROG="st nodes"
-    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/print_alloc.sh" "$@"
+    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/libexec/nodes.sh" "$@"
     ;;
   monitor)
     export SLURM_TOOLS_PROG="st monitor"
-    exec python3 "${SLURM_TOOLS_SCRIPT_DIR}/dep/node_monitor.py" "$@"
+    exec python3 "${SLURM_TOOLS_SCRIPT_DIR}/libexec/monitor.py" "$@"
     ;;
   upgrade)
     export SLURM_TOOLS_PROG="st upgrade"
-    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/upgrade.sh" "$@"
+    exec bash "${SLURM_TOOLS_SCRIPT_DIR}/libexec/upgrade.sh" "$@"
     ;;
   help | -h | --help)
     usage

@@ -23,7 +23,7 @@ Flags mirror `sbatch` (`-N` nodes, `-J` job-name, `-c` cpus); each has a long fo
 | `-N, --nodes` | NODES | `1` | Number of nodes |
 | `-c, --cpus` | CPUS | `16` | CPU cores per node |
 | `-m, --mem` | MEM_GB | `256` | Memory per node (GB) |
-| `-G, --gpu-type` | GPU_TYPE | any | Short GPU name (see [alloc.sh.md](alloc.sh.md)); omit to allow any GPU type |
+| `-G, --gpu-type` | GPU_TYPE | any | Short GPU name (see [alloc.md](alloc.md)); omit to allow any GPU type |
 | `-g, --gpus` | GPUS | `1` | GPUs per node (`0` for CPU-only) |
 | `-t, --time` | HOURS | `12` | Wall time (hours) |
 | `-p, --partition` | PARTITION | `best` | Partition or `best` |
@@ -36,7 +36,7 @@ When `SCRIPT` is provided, behaviour is unchanged: st submit prints the job ID a
 
 ## Notes
 
-- Resolves the partition with the same logic as `st partition` when `-p best` (runs the bundled `best_partition.sh`).
+- Resolves the partition with the same logic as `st partition` when `-p best` (runs the bundled `libexec/partition.sh`).
 - Creates `logs/` and validates `sbatch` success.
 - Same auto-upgrade env vars as `st alloc` (`SLURM_TOOLS_SKIP_UPGRADE`, etc.).
 - Shared helpers live in `lib/slurm_common.sh`.
@@ -50,4 +50,4 @@ warning: no partition has enough free resources right now; retrying against tota
 warning: gpu_h200 may be fully allocated; job will queue
 ```
 
-See [alloc.sh.md](alloc.sh.md#partition-selection--p-best) for full details.
+See [alloc.md](alloc.md#partition-selection--p-best) for full details.

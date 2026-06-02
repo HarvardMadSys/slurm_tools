@@ -88,7 +88,7 @@ usage() {
 usage: $0 [--dry-run]
   Symlinks tools to ${DEST} and appends a PATH snippet to your shell rc.
 
-  Upgrade later: st upgrade (or ${TOOL_ROOT}/upgrade.sh)
+  Upgrade later: st upgrade (or ${TOOL_ROOT}/libexec/upgrade.sh)
 EOF
   exit 0
 }
@@ -165,10 +165,10 @@ else
 fi
 
 if ! $DRY; then
-  chmod +x "${TOOL_ROOT}/st.sh" "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
-    "${TOOL_ROOT}/submit_job.sh" "${TOOL_ROOT}/best_partition.sh" \
-    "${TOOL_ROOT}/print_alloc.sh" "${TOOL_ROOT}/lib/slurm_common.sh" \
-    "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
+  chmod +x "${TOOL_ROOT}/st.sh" "${TOOL_ROOT}/lib/slurm_common.sh" \
+    "${TOOL_ROOT}/libexec/alloc.sh" "${TOOL_ROOT}/libexec/submit.sh" \
+    "${TOOL_ROOT}/libexec/partition.sh" "${TOOL_ROOT}/libexec/nodes.sh" \
+    "${TOOL_ROOT}/libexec/monitor.py" "${TOOL_ROOT}/libexec/upgrade.sh" 2>/dev/null || true
 fi
 
 # Single umbrella entry point; subcommands dispatch to the scripts above.

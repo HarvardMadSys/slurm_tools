@@ -34,7 +34,7 @@ slurm_tools_maybe_auto_upgrade() {
 
   slurm_tools_wants_skip_upgrade "$@" && return 0
 
-  up="${root}/upgrade.sh"
+  up="${root}/libexec/upgrade.sh"
   [[ -f "$up" ]] || return 0
 
   cache_dir="${HOME}/.cache/slurm_tools"
@@ -126,8 +126,8 @@ slurm_tools_build_gres_args() {
 
 # Path to the bundled partition recommender (invoked by `st partition`).
 slurm_tools_best_partition_cmd() {
-  if [[ -n "${SLURM_TOOLS_SCRIPT_DIR:-}" && -x "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh" ]]; then
-    printf '%s' "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh"
+  if [[ -n "${SLURM_TOOLS_SCRIPT_DIR:-}" && -x "${SLURM_TOOLS_SCRIPT_DIR}/libexec/partition.sh" ]]; then
+    printf '%s' "${SLURM_TOOLS_SCRIPT_DIR}/libexec/partition.sh"
     return 0
   fi
   return 1
@@ -143,7 +143,7 @@ slurm_tools_resolve_partition() {
   [[ "$partition" != "best" ]] && { printf '%s' "$partition"; return 0; }
 
   if ! best_partition_cmd="$(slurm_tools_best_partition_cmd)"; then
-    slurm_tools_print_log "partition recommender not found (best_partition.sh missing)"
+    slurm_tools_print_log "partition recommender not found (libexec/partition.sh missing)"
     return 1
   fi
 
