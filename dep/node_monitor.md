@@ -2,6 +2,9 @@
 
 Monitor CPU and memory usage of processes for a specific SLURM job. The script gets the node list from the job ID and SSH to each node to collect process information for your user.
 
+Installed command: `node-monitor`. The examples below use the repository script path
+`./node_monitor.py`.
+
 ## Features
 
 - **Job-specific monitoring**: Monitor processes for a specific SLURM job ID
@@ -238,12 +241,12 @@ Total Memory: 13357.5 MB
 
 This script complements the existing SLURM tools in your toolkit:
 
-- **`print_alloc`**: Shows available resources across nodes
-- **`best_partition`**: Finds optimal partition for job submission
-- **`node_monitor`**: Monitors actual resource usage of running jobs
+- **`print-alloc`**: Shows available resources across nodes
+- **`best-partition`**: Finds optimal partition for job submission
+- **`node-monitor`**: Monitors actual resource usage of running jobs
 
 ```bash
-best_partition --cpu 16 --mem 256 --gpu 1
+best-partition --cpu 16 --mem 256 --gpu 1
 sbatch -p recommended_partition job.sbatch
-node_monitor --job-id <job_id>
+node-monitor --job-id <job_id>
 ``` 

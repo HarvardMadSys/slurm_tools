@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: best_partition [--cpu|-c N] [--mem|-m GB] [--gpu|-g N] [--time|-t HOURS]
+usage: best-partition [--cpu|-c N] [--mem|-m GB] [--gpu|-g N] [--time|-t HOURS]
                       [--summary|-s] [--json|-j] [--name-only|-n]
                       [--total-resources|--tr] [--gpu-type STR] [--gpu-memory STR]
 

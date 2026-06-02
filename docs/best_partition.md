@@ -22,42 +22,42 @@ This tool analyzes SLURM partition `TRESBillingWeights` and recommends the best 
 
 ### Basic usage for CPU/Memory job (uses available resources by default):
 ```bash
-best_partition --cpu 4 --mem 8
+best-partition --cpu 4 --mem 8
 ```
 
 ### For GPU jobs (uses available resources by default):
 ```bash
-best_partition --cpu 8 --mem 16 --gpu 1
+best-partition --cpu 8 --mem 16 --gpu 1
 ```
 
 ### With time limit:
 ```bash
-best_partition --cpu 4 --mem 8 --time 96
+best-partition --cpu 4 --mem 8 --time 96
 ```
 
 ### Show summary of all partitions (shows available resources by default):
 ```bash
-best_partition --summary
+best-partition --summary
 ```
 
 ### Use total resources instead of available resources:
 ```bash
-best_partition --cpu 4 --mem 8 --gpu 1 --total-resources
+best-partition --cpu 4 --mem 8 --gpu 1 --total-resources
 ```
 
 ### Show summary with total resources:
 ```bash
-best_partition --summary --total-resources
+best-partition --summary --total-resources
 ```
 
 ### JSON output (includes available resources by default):
 ```bash
-best_partition --cpu 4 --mem 8 --json
+best-partition --cpu 4 --mem 8 --json
 ```
 
 ### JSON output with total resources:
 ```bash
-best_partition --cpu 4 --mem 8 --total-resources --json
+best-partition --cpu 4 --mem 8 --total-resources --json
 ```
 
 ## Command-line Arguments
@@ -83,10 +83,10 @@ Filter partitions by GPU type (e.g., A100, H100, V100):
 
 ```bash
 # Find partitions with A100 GPUs
-best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
 
 # Find partitions with H100 GPUs
-best_partition --cpu 4 --mem 8 --gpu 2 --gpu-type h100
+best-partition --cpu 4 --mem 8 --gpu 2 --gpu-type h100
 ```
 
 ### GPU Memory Filtering
@@ -95,10 +95,10 @@ Filter partitions by GPU memory size:
 
 ```bash
 # Find partitions with 80GB GPUs
-best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
 
 # Find partitions with 40GB GPUs
-best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
+best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
 ```
 
 ### Combined GPU Filtering
@@ -107,7 +107,7 @@ Combine both GPU type and memory filtering:
 
 ```bash
 # Find partitions with A100 80GB GPUs specifically
-best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
+best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 ```
 
 ### GPU information in summary
@@ -115,7 +115,7 @@ best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 Summary mode includes a **GPUInfo** column (lowercased Gres strings aggregated from nodes):
 
 ```bash
-best_partition --summary
+best-partition --summary
 ```
 
 Use `--gpu-type` / `--gpu-memory` to filter recommendations by substring match against that blob.
@@ -163,7 +163,7 @@ Override defaults with environment variables (space-separated partition names):
 
 ### Basic Usage (Available Resources - Default)
 ```bash
-$ best_partition --cpu 4 --mem 8 --gpu 1
+$ best-partition --cpu 4 --mem 8 --gpu 1
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -189,7 +189,7 @@ Suggested sbatch command:
 
 ### GPU Type Filtering
 ```bash
-$ best_partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+$ best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -212,7 +212,7 @@ Best recommendation: gpu_test
 
 ### GPU Memory Filtering
 ```bash
-$ best_partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+$ best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -229,7 +229,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 
 ### Summary with GPU Information
 ```bash
-$ best_partition --summary
+$ best-partition --summary
 
 Partition            CPU Wt     Mem Wt     GPU Wt     Max Time        State    AvailCPU AvailMemGB AvailGPU GPUInfo
 ---------------------------------------------------------------------------------------------------------------

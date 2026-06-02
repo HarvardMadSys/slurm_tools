@@ -25,7 +25,7 @@ any other cluster.**
 
 ### `SLURM_TOOLS_DEFAULT_PARTITION`
 
-**Used by:** `print_alloc`
+**Used by:** `print-alloc`
 
 Default value for `-p PARTITION` when the flag is omitted.
 
@@ -42,7 +42,7 @@ Default: `gpu_requeue`
 **Used by:** `slurm-alloc`, `slurm-submit`
 
 When `-u a100mig` is combined with `-p best`, this partition is used directly instead
-of calling `best_partition` (because MIG slices have non-standard GRES names that
+of calling `best-partition` (because MIG slices have non-standard GRES names that
 confuse the recommendation logic).
 
 ```bash
@@ -55,7 +55,7 @@ Default: `gpu_test`
 
 ### `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB`
 
-**Used by:** `best_partition`
+**Used by:** `best-partition`
 
 Space-separated list of partition names to exclude from recommendations when the job
 requests at least one GPU. Useful for CPU-only or shared partitions that technically
@@ -71,7 +71,7 @@ Default: `serial_requeue`
 
 ### `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB`
 
-**Used by:** `best_partition`
+**Used by:** `best-partition`
 
 Same as above but applied when the job requests zero GPUs (`-g 0`). Typically used
 to hide GPU-only partitions from CPU job recommendations.

@@ -171,8 +171,11 @@ if ! $DRY; then
     "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
 fi
 
+link_one "${TOOL_ROOT}/best_partition.sh" "best-partition"
 link_one "${TOOL_ROOT}/best_partition.sh" "best_partition"
+link_one "${TOOL_ROOT}/print_alloc.sh" "print-alloc"
 link_one "${TOOL_ROOT}/print_alloc.sh" "print_alloc"
+link_one "${TOOL_ROOT}/dep/node_monitor.py" "node-monitor"
 link_one "${TOOL_ROOT}/dep/node_monitor.py" "node_monitor"
 link_one "${TOOL_ROOT}/alloc.sh" "slurm-alloc"
 link_one "${TOOL_ROOT}/submit_job.sh" "slurm-submit"
@@ -220,6 +223,7 @@ else
   ohai "Next steps:"
   ver="$(read_version)"
   printf -- "- Version: %s (check upgrades: slurm-tools-upgrade --check)\n" "$ver"
-  printf -- "- Commands: best_partition, print_alloc, node_monitor, slurm-alloc, slurm-submit, slurm-tools-upgrade → %s\n" "$DEST"
+  printf -- "- Commands: best-partition, print-alloc, node-monitor, slurm-alloc, slurm-submit, slurm-tools-upgrade → %s\n" "$DEST"
+  printf -- "- Compatibility aliases: best_partition, print_alloc, node_monitor\n"
   printf '%s\n' '- Restart the shell or `source` your rc file so PATH updates.'
 fi

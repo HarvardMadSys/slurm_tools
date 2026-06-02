@@ -124,15 +124,37 @@ slurm_tools_build_gres_args() {
   GRES_ARGS=(--gres=gpu:"${full}":"${count}")
 }
 
+slurm_tools_best_partition_cmd() {
+  if command -v best-partition >/dev/null 2>&1; then
+    printf '%s' "best-partition"
+    return 0
+  fi
+  if command -v best_partition >/dev/null 2>&1; then
+    printf '%s' "best_partition"
+    return 0
+  fi
+  if [[ -n "${SLURM_TOOLS_SCRIPT_DIR:-}" && -x "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh" ]]; then
+    printf '%s' "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh"
+    return 0
+  fi
+  return 1
+}
+
 slurm_tools_resolve_partition() {
   # args: partition cpu mem gpu_count gpu_type timeout [node_count]
   local partition="$1" cpu="$2" mem="$3" gpu_count="$4" gpu_type="$5" timeout="$6"
   local nodes="${7:-1}"
   local mig_part="${SLURM_TOOLS_MIG_PARTITION:-gpu_test}"
+  local best_partition_cmd
 
   [[ "$partition" != "best" ]] && { printf '%s' "$partition"; return 0; }
 
-  # Scale to total resources across all nodes so best_partition can filter correctly.
+  if ! best_partition_cmd="$(slurm_tools_best_partition_cmd)"; then
+    slurm_tools_print_log "best-partition command not found"
+    return 1
+  fi
+
+  # Scale to total resources across all nodes so best-partition can filter correctly.
   local total_cpu=$(( cpu * nodes ))
   local total_mem=$(( mem * nodes ))
   local total_gpu=$(( gpu_count * nodes ))
@@ -149,7 +171,7 @@ slurm_tools_resolve_partition() {
   fi
 
   local result
-  result="$(best_partition -n -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" -n -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     printf '%s' "$result"
     return 0
@@ -157,7 +179,7 @@ slurm_tools_resolve_partition() {
 
   # No partition found using currently available resources; retry against total capacity.
   slurm_tools_print_log "warning: no partition has enough free resources right now; retrying against total capacity" >&2
-  result="$(best_partition -n --total-resources -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" -n --total-resources -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     slurm_tools_print_log "warning: ${result} may be fully allocated; job will queue" >&2
     printf '%s' "$result"

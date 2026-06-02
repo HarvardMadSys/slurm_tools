@@ -37,7 +37,7 @@ usage() {
   echo "  -u GPU_TYPE        GPU type (default: any GPU type)"
   echo "  -g GPU_COUNT       GPUs per node (default: 1; use 0 for CPU-only)"
   echo "  -t TIMEOUT_HOURS   Timeout in hours (default: 12)"
-  echo "  -p PARTITION       Partition (default: best; uses best_partition when best)"
+  echo "  -p PARTITION       Partition (default: best; uses best-partition when best)"
   echo "  -v                 Show version"
   echo "  -h                 Show this help message"
   exit 1

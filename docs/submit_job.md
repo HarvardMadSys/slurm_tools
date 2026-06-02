@@ -34,14 +34,14 @@ When `SCRIPT` is provided, behaviour is unchanged: slurm-submit prints the job I
 
 ## Notes
 
-- Requires `best_partition` in PATH when `-p best`.
+- Requires `best-partition` in PATH when `-p best`.
 - Creates `logs/` and validates `sbatch` success.
 - Same auto-upgrade env vars as `slurm-alloc` (`SLURM_TOOLS_SKIP_UPGRADE`, etc.).
 - Shared helpers live in `lib/slurm_common.sh`.
 
 ## Partition selection (`-p best`)
 
-`-c/-m/-g` are per-node; totals across nodes are passed to `best_partition`. Selection first tries currently **available** resources, then falls back to **total** capacity (job will queue). Fallback warnings go to stderr, e.g.:
+`-c/-m/-g` are per-node; totals across nodes are passed to `best-partition`. Selection first tries currently **available** resources, then falls back to **total** capacity (job will queue). Fallback warnings go to stderr, e.g.:
 
 ```
 warning: no partition has enough free resources right now; retrying against total capacity

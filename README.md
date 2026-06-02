@@ -5,8 +5,8 @@ Small utilities for SLURM: partition recommendations from billing weights, alloc
 ## Requirements
 
 - SLURM client tools (`sbatch`, `squeue`, `scontrol`).
-- Bash for `best_partition`, `print_alloc`, and `slurm-alloc`.
-- Python 3.6+ for `node_monitor` only (stdlib; needs SSH to compute nodes).
+- Bash for `best-partition`, `print-alloc`, and `slurm-alloc`.
+- Python 3.6+ for `node-monitor` only (stdlib; needs SSH to compute nodes).
 
 ## Install
 
@@ -23,12 +23,12 @@ mkdir -p ~/.local/share/slurm_tools && curl -fsSL https://codeload.github.com/Ha
 ./install.sh --dry-run   # preview only
 ```
 
-Adds to `~/.local/bin`: `best_partition`, `print_alloc`, `node_monitor`, `slurm-alloc`, `slurm-submit`, `slurm-tools-upgrade`. Reload your shell or `source` the rc file `install.sh` updated.
+Adds to `~/.local/bin`: `best-partition`, `print-alloc`, `node-monitor`, `slurm-alloc`, `slurm-submit`, `slurm-tools-upgrade`. Underscore aliases (`best_partition`, `print_alloc`, `node_monitor`) are also installed for compatibility. Reload your shell or `source` the rc file `install.sh` updated.
 
 ```bash
-best_partition --cpu 4 --mem 8
-print_alloc -p gpu_requeue
-node_monitor --job-id 12345
+best-partition --cpu 4 --mem 8
+print-alloc -p gpu_requeue
+node-monitor --job-id 12345
 ```
 
 ## Upgrade
@@ -47,10 +47,10 @@ Defaults target a Harvard FASRC-style cluster. Override with environment variabl
 | Variable | Used by | Default |
 |----------|---------|---------|
 | `SLURM_TOOLS_ALLOC_SCRIPT` | `slurm-alloc` | Harvard lab sleep script |
-| `SLURM_TOOLS_DEFAULT_PARTITION` | `print_alloc` | `gpu_requeue` |
+| `SLURM_TOOLS_DEFAULT_PARTITION` | `print-alloc` | `gpu_requeue` |
 | `SLURM_TOOLS_MIG_PARTITION` | `slurm-alloc`, `slurm-submit` | `gpu_test` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `best_partition` | `serial_requeue` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `best_partition` | `gpu_requeue gpu_test` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `best-partition` | `serial_requeue` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `best-partition` | `gpu_requeue gpu_test` |
 | `SLURM_TOOLS_SKIP_UPGRADE` | `slurm-alloc`, `slurm-submit` | unset |
 | `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | `slurm-alloc`, `slurm-submit` | unset |
 
@@ -58,22 +58,22 @@ Defaults target a Harvard FASRC-style cluster. Override with environment variabl
 
 | Command | Script | Purpose |
 |---------|--------|---------|
-| `best_partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
-| `print_alloc` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
-| `slurm-alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `best_partition` when `-p best` |
+| `best-partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
+| `print-alloc` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
+| `slurm-alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `best-partition` when `-p best` |
 | `slurm-submit` | `submit_job.sh` | Submit your batch script with the same flags; prints job ID |
-| `node_monitor` | `dep/node_monitor.py` | SSH to job nodes and show your processes |
+| `node-monitor` | `dep/node_monitor.py` | SSH to job nodes and show your processes |
 | `slurm-tools-upgrade` | `upgrade.sh` | Pull updates from GitHub |
 
 ## Quick start
 
 ```bash
-best_partition --cpu 4 --mem 8
-best_partition -n -c 4 -m 8 --gpu 1 --gpu-type h100   # partition name only
-print_alloc -p gpu_requeue
-print_alloc -p gpu_requeue -a                          # include CPU load / used memory
-node_monitor --job-id 12345
-node_monitor --job-id 12345 --json | jq .              # progress on stderr
+best-partition --cpu 4 --mem 8
+best-partition -n -c 4 -m 8 --gpu 1 --gpu-type h100   # partition name only
+print-alloc -p gpu_requeue
+print-alloc -p gpu_requeue -a                          # include CPU load / used memory
+node-monitor --job-id 12345
+node-monitor --job-id 12345 --json | jq .              # progress on stderr
 slurm-alloc -c 16 -m 256 -g 1 -u h100
 slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
 ```
@@ -82,11 +82,11 @@ slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
 
 | Tool | Doc |
 |------|-----|
-| `best_partition` | [docs/best_partition.md](docs/best_partition.md) |
-| `print_alloc` | [docs/print_alloc.md](docs/print_alloc.md) |
+| `best-partition` | [docs/best_partition.md](docs/best_partition.md) |
+| `print-alloc` | [docs/print_alloc.md](docs/print_alloc.md) |
 | `slurm-alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
 | `slurm-submit` | [docs/submit_job.md](docs/submit_job.md) |
-| `node_monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
+| `node-monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
 | environment variables | [docs/env.md](docs/env.md) |
 
 ## Notes on `slurm-alloc`

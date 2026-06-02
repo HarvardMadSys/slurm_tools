@@ -2,7 +2,7 @@
 
 ## Overview
 
-Interactive SLURM job allocation: auto-partition via `best_partition`, submit a placeholder job, wait until it is running on a valid node, then record the hostname under `~/.alloc/`.
+Interactive SLURM job allocation: auto-partition via `best-partition`, submit a placeholder job, wait until it is running on a valid node, then record the hostname under `~/.alloc/`.
 
 ## Basic usage
 
@@ -23,7 +23,7 @@ slurm-alloc -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
 | `-u` | GPU_TYPE | any | Short GPU name (see below); omit to allow any GPU type |
 | `-g` | GPU_COUNT | `1` | GPUs per node (`0` for CPU-only) |
 | `-t` | TIMEOUT_HOURS | `12` | Wall time (hours; `>23` becomes `D-HH:00:00`) |
-| `-p` | PARTITION | `best` | Partition or `best` for `best_partition` |
+| `-p` | PARTITION | `best` | Partition or `best` for `best-partition` |
 | `-v` | | | Show version |
 | `-h` | | | Help |
 
@@ -56,10 +56,10 @@ slurm-alloc -c 16 -m 128 -g 1 -u h100 -p gpu_requeue
 
 ## Partition selection (`-p best`)
 
-`-c/-m/-g` are per-node; totals (`cpu*nodes`, `mem*nodes`, `gpu*nodes`) are passed to `best_partition`.
+`-c/-m/-g` are per-node; totals (`cpu*nodes`, `mem*nodes`, `gpu*nodes`) are passed to `best-partition`.
 
-1. First pass uses currently **available** resources (`best_partition -n`).
-2. If nothing fits, falls back to **total** capacity (`best_partition -n --total-resources`); the job will queue. A warning is logged to stderr:
+1. First pass uses currently **available** resources (`best-partition -n`).
+2. If nothing fits, falls back to **total** capacity (`best-partition -n --total-resources`); the job will queue. A warning is logged to stderr:
    `warning: no partition has enough free resources right now; retrying against total capacity`
    `warning: <partition> may be fully allocated; job will queue`
 3. If neither pass finds a partition, exits with `No suitable partitions found for your requirements.`
