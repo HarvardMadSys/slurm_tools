@@ -1,6 +1,10 @@
 # Slurm tools
 
-Small utilities for SLURM, exposed as a single `st` command: partition recommendations from billing weights, allocation-style job submission, node resource tables, and per-job process monitoring.
+Small utilities for SLURM, exposed as a single `st` command: partition recommendations from billing weights, allocation-style job submission, node resource tables, and per-job process monitoring. 
+
+## Features
+- **Partition recommendations**: `st partition` recommends a partition based on billing weights and available resources, with filters for GPU type and other features. **This is useful for reducing wait time and cost**.
+- **Allocation-style job submission**: `st alloc` and `st submit` allocate a node from the best partition and submit a job to it in one step, with an optional placeholder sleep script for interactive use. **This is useful for quickly starting jobs on low-cost partitions**.
 
 ## Requirements
 
