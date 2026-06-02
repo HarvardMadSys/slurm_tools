@@ -207,8 +207,24 @@ case "$shell_base" in
     ;;
 esac
 
+print_st_usage() {
+  cat <<'EOF'
+  st partition -c 4 -m 8                  # recommend lowest-cost partition for a job (4 cores and 8GB DRAM)
+  st nodes -p gpu_requeue                 # available GPU/CPU/memory per node (find nodes for allocation)
+  st alloc -c 16 -m 256 -g 1 -G h100      # grab an interactive allocation
+  st submit -c 16 -m 256 -g 1 train.sh    # run a script on a new allocation
+  st upgrade --check                      # check for updates
+
+  Flags mirror sbatch: -N nodes, -J job-name, -c cpus, -G gpu-type, -t hours, -p partition.
+  Run 'st help' or 'st <command> -h' for details.
+EOF
+}
+
 if $DRY; then
   ohai "[dry-run] Done."
+  echo
+  ohai "Usage (after install):"
+  print_st_usage
 else
   ring_bell
   ohai "Installation successful!"
@@ -219,4 +235,7 @@ else
   printf -- "- Command: st → %s (run 'st help' to list subcommands)\n" "$DEST"
   printf -- "- Subcommands: st alloc, st submit, st partition, st nodes, st monitor, st upgrade\n"
   printf '%s\n' '- Restart the shell or `source` your rc file so PATH updates.'
+  echo
+  ohai "Usage:"
+  print_st_usage
 fi
