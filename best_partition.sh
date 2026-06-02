@@ -2,13 +2,27 @@
 # Recommend a SLURM partition (bash + awk over scontrol; no Python).
 set -euo pipefail
 
-usage() {
-  cat <<'EOF'
-usage: best-partition [--cpu|-c N] [--mem|-m GB] [--gpu|-g N] [--time|-t HOURS]
-                      [--summary|-s] [--json|-j] [--name-only|-n]
-                      [--total-resources|--tr] [--gpu-type STR] [--gpu-memory STR]
+PROG="${SLURM_TOOLS_PROG:-$(basename "$0")}"
 
-Requires --cpu and --mem unless --summary.
+usage() {
+  cat <<EOF
+usage: ${PROG} [-c|--cpus N] [-m|--mem GB] [-g|--gpus N] [-G|--gpu-type STR]
+       [--gpu-memory STR] [-t|--time HOURS] [-s|--summary] [--json] [--name-only] [--total]
+
+Requires -c/--cpus and -m/--mem unless --summary.
+
+Options:
+  -c, --cpus N        CPUs required (required unless --summary)
+  -m, --mem GB        Memory in GB required (required unless --summary)
+  -g, --gpus N        GPUs required (default: 0)
+  -G, --gpu-type STR  Filter to partitions whose GPUs match STR (e.g. h100)
+      --gpu-memory STR  Filter by GPU memory substring (e.g. 80gb)
+  -t, --time HOURS    Minimum max-time the partition must allow
+  -s, --summary       Show a table of all partitions instead of a recommendation
+      --total         Use total capacity instead of currently-available resources
+      --json          Output JSON
+      --name-only     Print only the best partition name (for scripts)
+  -h, --help          Show this help
 EOF
 }
 
@@ -21,20 +35,20 @@ CPU=""; MEM=""; GPU=0; TIME=""; SUMMARY=0; JSON_OUT=0; NAMEONLY=0; TOTAL_RES=0; 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
-    --cpu=* ) CPU="${1#*=}"; shift ;;
-    -c|--cpu) CPU="${2:?}"; shift 2 ;;
+    --cpus=* ) CPU="${1#*=}"; shift ;;
+    -c|--cpus) CPU="${2:?}"; shift 2 ;;
     --mem=* ) MEM="${1#*=}"; shift ;;
     -m|--mem) MEM="${2:?}"; shift 2 ;;
-    --gpu=* ) GPU="${1#*=}"; shift ;;
-    -g|--gpu) GPU="${2:?}"; shift 2 ;;
+    --gpus=* ) GPU="${1#*=}"; shift ;;
+    -g|--gpus) GPU="${2:?}"; shift 2 ;;
     --time=* ) TIME="${1#*=}"; shift ;;
     -t|--time) TIME="${2:?}"; shift 2 ;;
     -s|--summary) SUMMARY=1; shift ;;
-    -j|--json) JSON_OUT=1; shift ;;
-    -n|--name-only) NAMEONLY=1; shift ;;
-    --total-resources|--tr) TOTAL_RES=1; shift ;;
+    --json) JSON_OUT=1; shift ;;
+    --name-only) NAMEONLY=1; shift ;;
+    --total) TOTAL_RES=1; shift ;;
     --gpu-type=* ) GPUTYPE="${1#*=}"; shift ;;
-    --gpu-type) GPUTYPE="${2:?}"; shift 2 ;;
+    -G|--gpu-type) GPUTYPE="${2:?}"; shift 2 ;;
     --gpu-memory=* ) GPUMEM="${1#*=}"; shift ;;
     --gpu-memory) GPUMEM="${2:?}"; shift 2 ;;
     *) abort "unknown argument: $1" ;;
@@ -44,7 +58,7 @@ done
 HAVE_AVAIL=1; [[ "$TOTAL_RES" == "1" ]] && HAVE_AVAIL=0
 
 if [[ "$SUMMARY" != "1" ]]; then
-  [[ -n "${CPU:-}" && -n "${MEM:-}" ]] || abort "Error: --cpu and --mem are required unless using --summary"
+  [[ -n "${CPU:-}" && -n "${MEM:-}" ]] || abort "Error: -c/--cpus and -m/--mem are required unless using --summary"
 fi
 
 nodes_line_for_partition() {

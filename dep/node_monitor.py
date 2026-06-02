@@ -3,6 +3,7 @@
 import subprocess
 import re
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from typing import List, Optional
@@ -228,13 +229,15 @@ def print_usage_table(node_usages: List[NodeUsage], process_filter: Optional[str
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Monitor CPU/memory usage of processes for a specific SLURM job"
+        prog=os.environ.get("SLURM_TOOLS_PROG", "node_monitor"),
+        description="Monitor CPU/memory usage of processes for a specific SLURM job",
     )
-    parser.add_argument("--job-id", "-j", required=True, help="SLURM job ID to monitor")
+    parser.add_argument("jobid", help="SLURM job ID to monitor")
     parser.add_argument("--json", action="store_true", help="Output JSON to stdout")
     parser.add_argument(
-        "--proc",
+        "--filter",
         "-f",
+        dest="proc",
         default=None,
         help="filter processes by command substring (case-insensitive)",
     )
@@ -245,18 +248,18 @@ def main():
         ["whoami"], capture_output=True, text=True, check=True
     ).stdout.strip()
 
-    log(f"Monitoring job {args.job_id} for user: {username}")
-    log(f"Getting nodes for job {args.job_id}...")
+    log(f"Monitoring job {args.jobid} for user: {username}")
+    log(f"Getting nodes for job {args.jobid}...")
 
     try:
-        nodes = get_job_nodes(args.job_id)
+        nodes = get_job_nodes(args.jobid)
     except subprocess.CalledProcessError as e:
-        log(f"Error getting job {args.job_id}: {e}")
+        log(f"Error getting job {args.jobid}: {e}")
         sys.exit(1)
 
     if not nodes:
-        log(f"No valid nodes found for job {args.job_id}")
-        log(f"Try checking job status with: scontrol show job {args.job_id}")
+        log(f"No valid nodes found for job {args.jobid}")
+        log(f"Try checking job status with: scontrol show job {args.jobid}")
         sys.exit(1)
 
     log(f"Found {len(nodes)} nodes: {', '.join(nodes)}")

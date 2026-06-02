@@ -3,9 +3,11 @@
 # Uses bash + awk over scontrol (no Python).
 set -euo pipefail
 
+PROG="${SLURM_TOOLS_PROG:-$(basename "$0")}"
+
 usage() {
   cat <<EOF
-usage: $(basename "$0") [--partition|-p NAME] [--available|-a] [--help|-h]
+usage: ${PROG} [--partition|-p NAME] [--available|-a] [--help|-h]
 
   -p PARTITION   Partition to query (default: SLURM_TOOLS_DEFAULT_PARTITION or gpu_requeue)
   -a             Include CPULoad and used-memory columns
@@ -30,7 +32,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "$(basename "$0"): unknown argument: $1" >&2
+      echo "${PROG}: unknown argument: $1" >&2
       usage >&2
       exit 1
       ;;
@@ -48,7 +50,7 @@ while IFS= read -r line; do
 done < <(scontrol show partition "$PARTITION")
 
 if [[ -z "$NODE_LIST" ]]; then
-  echo "$(basename "$0"): could not read Nodes= for partition: ${PARTITION}" >&2
+  echo "${PROG}: could not read Nodes= for partition: ${PARTITION}" >&2
   exit 1
 fi
 

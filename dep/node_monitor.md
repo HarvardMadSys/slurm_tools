@@ -2,7 +2,7 @@
 
 Monitor CPU and memory usage of processes for a specific SLURM job. The script gets the node list from the job ID and SSH to each node to collect process information for your user.
 
-Installed command: `node-monitor`. The examples below use the repository script path
+Installed command: `st monitor`. The examples below use the repository script path
 `./node_monitor.py`.
 
 ## Features
@@ -23,30 +23,30 @@ Installed command: `node-monitor`. The examples below use the repository script 
 ### Basic Usage (Specify job ID)
 ```bash
 # Monitor processes for a specific job
-./node_monitor.py --job-id 12345678
+./node_monitor.py 12345678
 
 # Filter processes (only show Python processes)
-./node_monitor.py --job-id 12345678 --proc python
+./node_monitor.py 12345678 --filter python
 
 # Filter GPU-related processes
-./node_monitor.py --job-id 12345678 --proc nvidia
+./node_monitor.py 12345678 --filter nvidia
 ```
 
 ### JSON Output
 ```bash
 # Get JSON output for programmatic use (includes process details)
-./node_monitor.py --job-id 12345678 --json
+./node_monitor.py 12345678 --json
 
 # JSON with filtering
-./node_monitor.py --job-id 12345678 --json --proc python
+./node_monitor.py 12345678 --json --filter python
 ```
 
 ## Command Line Options
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--job-id` | `-j` | SLURM job ID to monitor (required) |
-| `--proc` | `-f` | Filter processes by command substring (case-insensitive) |
+| `jobid` (positional) | | SLURM job ID to monitor (required) |
+| `--filter` | `-f` | Filter processes by command substring (case-insensitive) |
 | `--json` | | Output results in JSON format (includes process details) |
 | `--help` | `-h` | Show help message |
 
@@ -66,7 +66,7 @@ Total CPU%: 69.0
 Total Memory: 12953.4 MB
 ```
 
-### With Process Filtering (`--proc python`)
+### With Process Filtering (`--filter python`)
 ```
 Node                 CPU%     Memory(MB)   Processes  Status
 ----                 ----     ---------    ---------  ------
@@ -126,7 +126,7 @@ Total Memory: 9379.3 MB
 
 ### Monitor a Specific Job
 ```bash
-$ ./node_monitor.py --job-id 12345678
+$ ./node_monitor.py 12345678
 Monitoring job 12345678 for user: juncheng
 Getting nodes for job 12345678...
 Found 2 nodes: holygpu8a16101, holygpu8a16102
@@ -148,7 +148,7 @@ Total Memory: 18687.3 MB
 
 ### Filter Specific Processes
 ```bash
-$ ./node_monitor.py --job-id 12345678 --proc python
+$ ./node_monitor.py 12345678 --filter python
 Monitoring job 12345678 for user: juncheng
 Getting nodes for job 12345678...
 Found 2 nodes: holygpu8a16101, holygpu8a16102
@@ -214,39 +214,39 @@ Total Memory: 13357.5 MB
 
 ```bash
 # Monitor only Python processes for a job
-./node_monitor.py --job-id 12345678 --proc python
+./node_monitor.py 12345678 --filter python
 
 # Monitor GPU-related processes
-./node_monitor.py --job-id 12345678 --proc nvidia
+./node_monitor.py 12345678 --filter nvidia
 
 # Monitor machine learning frameworks
-./node_monitor.py --job-id 12345678 --proc torch      # PyTorch processes
-./node_monitor.py --job-id 12345678 --proc tensorflow # TensorFlow processes
+./node_monitor.py 12345678 --filter torch      # PyTorch processes
+./node_monitor.py 12345678 --filter tensorflow # TensorFlow processes
 
 # Monitor specific applications
-./node_monitor.py --job-id 12345678 --proc jupyter    # Jupyter processes
-./node_monitor.py --job-id 12345678 --proc code       # VS Code processes
-./node_monitor.py --job-id 12345678 --proc ssh        # SSH processes
+./node_monitor.py 12345678 --filter jupyter    # Jupyter processes
+./node_monitor.py 12345678 --filter code       # VS Code processes
+./node_monitor.py 12345678 --filter ssh        # SSH processes
 
 # Case-insensitive matching examples:
-./node_monitor.py --job-id 12345678 --proc PYTHON     # matches "python", "Python", "python3"
-./node_monitor.py --job-id 12345678 --proc cuda       # matches "cuda", "CUDA", "cudamallocasync"
-./node_monitor.py --job-id 12345678 --proc mpi        # matches "mpi", "MPI", "mpirun", "mpiexec"
+./node_monitor.py 12345678 --filter PYTHON     # matches "python", "Python", "python3"
+./node_monitor.py 12345678 --filter cuda       # matches "cuda", "CUDA", "cudamallocasync"
+./node_monitor.py 12345678 --filter mpi        # matches "mpi", "MPI", "mpirun", "mpiexec"
 
 # Combine with JSON output
-./node_monitor.py --job-id 12345678 --proc python --json  # Detailed Python processes in JSON
+./node_monitor.py 12345678 --filter python --json  # Detailed Python processes in JSON
 ```
 
 ## Integration with Existing Tools
 
 This script complements the existing SLURM tools in your toolkit:
 
-- **`print-alloc`**: Shows available resources across nodes
-- **`best-partition`**: Finds optimal partition for job submission
-- **`node-monitor`**: Monitors actual resource usage of running jobs
+- **`st nodes`**: Shows available resources across nodes
+- **`st partition`**: Finds optimal partition for job submission
+- **`st monitor`**: Monitors actual resource usage of running jobs
 
 ```bash
-best-partition --cpu 16 --mem 256 --gpu 1
+st partition --cpu 16 --mem 256 --gpu 1
 sbatch -p recommended_partition job.sbatch
-node-monitor --job-id <job_id>
+st monitor <job_id>
 ``` 

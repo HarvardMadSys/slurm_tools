@@ -1,12 +1,12 @@
 # Slurm tools
 
-Small utilities for SLURM: partition recommendations from billing weights, allocation-style job submission, node resource tables, and per-job process monitoring.
+Small utilities for SLURM, exposed as a single `st` command: partition recommendations from billing weights, allocation-style job submission, node resource tables, and per-job process monitoring.
 
 ## Requirements
 
 - SLURM client tools (`sbatch`, `squeue`, `scontrol`).
-- Bash for `best-partition`, `print-alloc`, `slurm-alloc`, and `slurm-submit`.
-- Python 3.6+ for `node-monitor` only (stdlib; needs SSH to compute nodes).
+- Bash for `st` and all subcommands except `monitor`.
+- Python 3.7+ for `st monitor` only (stdlib; needs SSH to compute nodes).
 
 ## Install
 
@@ -23,22 +23,48 @@ mkdir -p ~/.local/share/slurm_tools && curl -fsSL https://codeload.github.com/Ha
 ./install.sh --dry-run   # preview only
 ```
 
-Adds to `~/.local/bin`: `best-partition`, `print-alloc`, `node-monitor`, `slurm-alloc`, `slurm-submit`, `slurm-tools-upgrade`. Underscore aliases (`best_partition`, `print_alloc`, `node_monitor`) are also installed for compatibility. Reload your shell or `source` the rc file `install.sh` updated.
+Installs a single command, `st`, into `~/.local/bin`. Reload your shell or `source` the rc file `install.sh` updated, then run `st help` to list subcommands.
 
 ```bash
-best-partition --cpu 4 --mem 8
-print-alloc -p gpu_requeue
-node-monitor --job-id 12345
+st partition -c 4 -m 8
+st nodes -p gpu_requeue
+st monitor 12345
 ```
 
 ## Upgrade
 
 ```bash
-slurm-tools-upgrade --check
-slurm-tools-upgrade -y
+st upgrade --check
+st upgrade -y
 ```
 
-Version is stored in `VERSION` at the install root. Upgrades replace the install tree (`rsync --delete` when available); a git checkout used as `SLURM_TOOLS_ROOT` may lose `.git`. See `slurm-tools-upgrade --help` for `SLURM_TOOLS_ROOT`, `SLURM_TOOLS_BRANCH`, and `SLURM_TOOLS_REPO`.
+Version is stored in `VERSION` at the install root. Upgrades replace the install tree (`rsync --delete` when available); a git checkout used as `SLURM_TOOLS_ROOT` may lose `.git`. See `st upgrade --help` for `SLURM_TOOLS_ROOT`, `SLURM_TOOLS_BRANCH`, and `SLURM_TOOLS_REPO`.
+
+## Commands
+
+`st` dispatches to one subcommand per tool. Flags mirror `sbatch` where they overlap (`-N` nodes, `-J` job-name, `-c` cpus, `-G` gpu-type, `-t` time, `-p` partition); every flag has a long form too.
+
+| Command | Script | Purpose |
+|---------|--------|---------|
+| `st alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `st partition` when `-p best` |
+| `st submit` | `submit_job.sh` | Submit your batch script with the same flags; prints job ID |
+| `st partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
+| `st nodes` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
+| `st monitor` | `dep/node_monitor.py` | SSH to a job's nodes and show your processes |
+| `st upgrade` | `upgrade.sh` | Pull updates from GitHub |
+
+## Quick start
+
+```bash
+st partition -c 4 -m 8
+st partition -c 4 -m 8 -g 1 -G h100 --name-only   # partition name only
+st nodes -p gpu_requeue
+st nodes -p gpu_requeue -a                          # include CPU load / used memory
+st monitor 12345
+st monitor 12345 --json | jq .                      # progress on stderr
+st alloc -c 16 -m 256 -g 1 -G h100
+st submit -c 16 -m 256 -g 1 -G h100 train.sh
+```
 
 ## Site configuration
 
@@ -46,51 +72,27 @@ Defaults target a Harvard FASRC-style cluster. Override with environment variabl
 
 | Variable | Used by | Default |
 |----------|---------|---------|
-| `SLURM_TOOLS_ALLOC_SCRIPT` | `slurm-alloc` | Harvard lab sleep script |
-| `SLURM_TOOLS_DEFAULT_PARTITION` | `print-alloc` | `gpu_requeue` |
-| `SLURM_TOOLS_MIG_PARTITION` | `slurm-alloc`, `slurm-submit` | `gpu_test` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `best-partition` | `serial_requeue` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `best-partition` | `gpu_requeue gpu_test` |
-| `SLURM_TOOLS_SKIP_UPGRADE` | `slurm-alloc`, `slurm-submit` | unset |
-| `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | `slurm-alloc`, `slurm-submit` | unset |
-
-## Tools
-
-| Command | Script | Purpose |
-|---------|--------|---------|
-| `best-partition` | `best_partition.sh` | Recommend a partition from billing weights and available resources |
-| `print-alloc` | `print_alloc.sh` | Table of unallocated GPU/CPU/memory per node |
-| `slurm-alloc` | `alloc.sh` | Submit a placeholder job; auto-partition via `best-partition` when `-p best` |
-| `slurm-submit` | `submit_job.sh` | Submit your batch script with the same flags; prints job ID |
-| `node-monitor` | `dep/node_monitor.py` | SSH to job nodes and show your processes |
-| `slurm-tools-upgrade` | `upgrade.sh` | Pull updates from GitHub |
-
-## Quick start
-
-```bash
-best-partition --cpu 4 --mem 8
-best-partition -n -c 4 -m 8 --gpu 1 --gpu-type h100   # partition name only
-print-alloc -p gpu_requeue
-print-alloc -p gpu_requeue -a                          # include CPU load / used memory
-node-monitor --job-id 12345
-node-monitor --job-id 12345 --json | jq .              # progress on stderr
-slurm-alloc -c 16 -m 256 -g 1 -u h100
-slurm-submit -c 16 -m 256 -g 1 -u h100 train.sh
-```
+| `SLURM_TOOLS_ALLOC_SCRIPT` | `st alloc` | Harvard lab sleep script |
+| `SLURM_TOOLS_DEFAULT_PARTITION` | `st nodes` | `gpu_requeue` |
+| `SLURM_TOOLS_MIG_PARTITION` | `st alloc`, `st submit` | `gpu_test` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `st partition` | `serial_requeue` |
+| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `st partition` | `gpu_requeue gpu_test` |
+| `SLURM_TOOLS_SKIP_UPGRADE` | `st alloc`, `st submit` | unset |
+| `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | `st alloc`, `st submit` | unset |
 
 ## Docs
 
 | Tool | Doc |
 |------|-----|
-| `best-partition` | [docs/best_partition.md](docs/best_partition.md) |
-| `print-alloc` | [docs/print_alloc.md](docs/print_alloc.md) |
-| `slurm-alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
-| `slurm-submit` | [docs/submit_job.md](docs/submit_job.md) |
-| `node-monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
+| `st partition` | [docs/best_partition.md](docs/best_partition.md) |
+| `st nodes` | [docs/print_alloc.md](docs/print_alloc.md) |
+| `st alloc` | [docs/alloc.sh.md](docs/alloc.sh.md) |
+| `st submit` | [docs/submit_job.md](docs/submit_job.md) |
+| `st monitor` | [dep/node_monitor.md](dep/node_monitor.md) |
 | environment variables | [docs/env.md](docs/env.md) |
 
-## Notes on `slurm-alloc`
+## Notes on `st alloc`
 
 `alloc.sh` uses a cluster-specific default for the placeholder sleep script. Set `SLURM_TOOLS_ALLOC_SCRIPT` on other sites.
 
-On each run, `slurm-alloc` may auto-upgrade from GitHub (at most once per 24h). Disable with `SLURM_TOOLS_SKIP_UPGRADE=1`; force a check with `SLURM_TOOLS_FORCE_UPGRADE_CHECK=1`.
+On each run, `st alloc` may auto-upgrade from GitHub (at most once per 24h). Disable with `SLURM_TOOLS_SKIP_UPGRADE=1`; force a check with `SLURM_TOOLS_FORCE_UPGRADE_CHECK=1`.

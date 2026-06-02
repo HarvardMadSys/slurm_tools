@@ -88,7 +88,7 @@ usage() {
 usage: $0 [--dry-run]
   Symlinks tools to ${DEST} and appends a PATH snippet to your shell rc.
 
-  Upgrade later: slurm-tools-upgrade (or ${TOOL_ROOT}/upgrade.sh)
+  Upgrade later: st upgrade (or ${TOOL_ROOT}/upgrade.sh)
 EOF
   exit 0
 }
@@ -165,21 +165,14 @@ else
 fi
 
 if ! $DRY; then
-  chmod +x "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
+  chmod +x "${TOOL_ROOT}/st.sh" "${TOOL_ROOT}/upgrade.sh" "${TOOL_ROOT}/alloc.sh" \
     "${TOOL_ROOT}/submit_job.sh" "${TOOL_ROOT}/best_partition.sh" \
     "${TOOL_ROOT}/print_alloc.sh" "${TOOL_ROOT}/lib/slurm_common.sh" \
     "${TOOL_ROOT}/dep/node_monitor.py" 2>/dev/null || true
 fi
 
-link_one "${TOOL_ROOT}/best_partition.sh" "best-partition"
-link_one "${TOOL_ROOT}/best_partition.sh" "best_partition"
-link_one "${TOOL_ROOT}/print_alloc.sh" "print-alloc"
-link_one "${TOOL_ROOT}/print_alloc.sh" "print_alloc"
-link_one "${TOOL_ROOT}/dep/node_monitor.py" "node-monitor"
-link_one "${TOOL_ROOT}/dep/node_monitor.py" "node_monitor"
-link_one "${TOOL_ROOT}/alloc.sh" "slurm-alloc"
-link_one "${TOOL_ROOT}/submit_job.sh" "slurm-submit"
-link_one "${TOOL_ROOT}/upgrade.sh" "slurm-tools-upgrade"
+# Single umbrella entry point; subcommands dispatch to the scripts above.
+link_one "${TOOL_ROOT}/st.sh" "st"
 
 shell_base="$(basename "${SHELL:-bash}")"
 
@@ -222,8 +215,8 @@ else
   echo
   ohai "Next steps:"
   ver="$(read_version)"
-  printf -- "- Version: %s (check upgrades: slurm-tools-upgrade --check)\n" "$ver"
-  printf -- "- Commands: best-partition, print-alloc, node-monitor, slurm-alloc, slurm-submit, slurm-tools-upgrade → %s\n" "$DEST"
-  printf -- "- Compatibility aliases: best_partition, print_alloc, node_monitor\n"
+  printf -- "- Version: %s (check upgrades: st upgrade --check)\n" "$ver"
+  printf -- "- Command: st → %s (run 'st help' to list subcommands)\n" "$DEST"
+  printf -- "- Subcommands: st alloc, st submit, st partition, st nodes, st monitor, st upgrade\n"
   printf '%s\n' '- Restart the shell or `source` your rc file so PATH updates.'
 fi

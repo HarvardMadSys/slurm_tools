@@ -96,7 +96,7 @@ resolve_install_root() {
     return 0
   fi
 
-  for cand in best-partition print-alloc slurm-alloc slurm-submit node-monitor slurm-tools-upgrade best_partition print_alloc node_monitor; do
+  for cand in st; do
     link="${HOME}/.local/bin/${cand}"
     [[ -e "$link" ]] || continue
     if [[ -L "$link" ]]; then
@@ -136,7 +136,7 @@ Options:
   -c, --check       Compare versions only (exit 0 up to date, 1 upgrade available, 2 check failed)
   -y, --yes         Apply upgrade without prompting (implies upgrade when newer)
   -n, --dry-run     Show what would be done
-  -q, --quiet       Minimal output (for scripts, e.g. slurm-alloc)
+  -q, --quiet       Minimal output (for scripts, e.g. st alloc)
   -V, --version     Print the installed version and exit
   -h, --help        Show this help
 

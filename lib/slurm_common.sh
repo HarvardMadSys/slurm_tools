@@ -1,6 +1,6 @@
-# Shared helpers for slurm-alloc / slurm-submit. Source from repo scripts only.
+# Shared helpers for st alloc / st submit. Source from repo scripts only.
 # Site overrides (optional):
-#   SLURM_TOOLS_ALLOC_SCRIPT      Batch script for slurm-alloc placeholder job
+#   SLURM_TOOLS_ALLOC_SCRIPT      Batch script for st alloc placeholder job
 #   SLURM_TOOLS_MIG_PARTITION     Partition for a100mig (default: gpu_test)
 #   SLURM_TOOLS_SKIP_UPGRADE      Set to 1 to disable auto-upgrade
 #   SLURM_TOOLS_FORCE_UPGRADE_CHECK  Set to 1 to force version check
@@ -23,7 +23,7 @@ slurm_tools_wants_skip_upgrade() {
   local a
   for a in "$@"; do
     case "$a" in
-      -v | -h | --help) return 0 ;;
+      --version | -h | --help) return 0 ;;
     esac
   done
   return 1
@@ -124,15 +124,8 @@ slurm_tools_build_gres_args() {
   GRES_ARGS=(--gres=gpu:"${full}":"${count}")
 }
 
+# Path to the bundled partition recommender (invoked by `st partition`).
 slurm_tools_best_partition_cmd() {
-  if command -v best-partition >/dev/null 2>&1; then
-    printf '%s' "best-partition"
-    return 0
-  fi
-  if command -v best_partition >/dev/null 2>&1; then
-    printf '%s' "best_partition"
-    return 0
-  fi
   if [[ -n "${SLURM_TOOLS_SCRIPT_DIR:-}" && -x "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh" ]]; then
     printf '%s' "${SLURM_TOOLS_SCRIPT_DIR}/best_partition.sh"
     return 0
@@ -150,11 +143,11 @@ slurm_tools_resolve_partition() {
   [[ "$partition" != "best" ]] && { printf '%s' "$partition"; return 0; }
 
   if ! best_partition_cmd="$(slurm_tools_best_partition_cmd)"; then
-    slurm_tools_print_log "best-partition command not found"
+    slurm_tools_print_log "partition recommender not found (best_partition.sh missing)"
     return 1
   fi
 
-  # Scale to total resources across all nodes so best-partition can filter correctly.
+  # Scale to total resources across all nodes so the recommender can filter correctly.
   local total_cpu=$(( cpu * nodes ))
   local total_mem=$(( mem * nodes ))
   local total_gpu=$(( gpu_count * nodes ))
@@ -171,7 +164,7 @@ slurm_tools_resolve_partition() {
   fi
 
   local result
-  result="$("${best_partition_cmd}" -n -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" --name-only -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     printf '%s' "$result"
     return 0
@@ -179,7 +172,7 @@ slurm_tools_resolve_partition() {
 
   # No partition found using currently available resources; retry against total capacity.
   slurm_tools_print_log "warning: no partition has enough free resources right now; retrying against total capacity" >&2
-  result="$("${best_partition_cmd}" -n --total-resources -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" --name-only --total -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     slurm_tools_print_log "warning: ${result} may be fully allocated; job will queue" >&2
     printf '%s' "$result"
@@ -187,7 +180,56 @@ slurm_tools_resolve_partition() {
   fi
 }
 
-# Shared post-getopts preparation for slurm-alloc / slurm-submit.
+# Standard job-flag defaults for st-alloc / st-submit. Sets globals.
+slurm_tools_set_job_defaults() {
+  JOB_NAME=""
+  NODE_COUNT=1
+  CPU_CORE=16
+  MEM_GB=256
+  GPU_TYPE=""
+  GPU_COUNT=1
+  TIMEOUT_HOURS=12
+  PARTITION="best"
+}
+
+# Parse the shared resource flags for `st alloc` / `st submit`. Sets the job
+# globals (JOB_NAME, NODE_COUNT, CPU_CORE, MEM_GB, GPU_TYPE, GPU_COUNT,
+# TIMEOUT_HOURS, PARTITION) and the SLURM_TOOLS_POSITIONAL array (leftover args
+# after the first non-option or `--`, e.g. a script and its arguments).
+# Flags mirror sbatch: -J job-name, -N nodes, -c cpus, -G gpu-type.
+# $1 is the name of a usage function to call on -h/--help or a bad option.
+slurm_tools_parse_job_args() {
+  local usage_fn="$1"
+  shift
+  SLURM_TOOLS_POSITIONAL=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -J | --job-name) JOB_NAME="${2:?}"; shift 2 ;;
+      --job-name=*) JOB_NAME="${1#*=}"; shift ;;
+      -N | --nodes) NODE_COUNT="${2:?}"; shift 2 ;;
+      --nodes=*) NODE_COUNT="${1#*=}"; shift ;;
+      -c | --cpus) CPU_CORE="${2:?}"; shift 2 ;;
+      --cpus=*) CPU_CORE="${1#*=}"; shift ;;
+      -m | --mem) MEM_GB="${2:?}"; shift 2 ;;
+      --mem=*) MEM_GB="${1#*=}"; shift ;;
+      -G | --gpu-type) GPU_TYPE="${2:?}"; shift 2 ;;
+      --gpu-type=*) GPU_TYPE="${1#*=}"; shift ;;
+      -g | --gpus) GPU_COUNT="${2:?}"; shift 2 ;;
+      --gpus=*) GPU_COUNT="${1#*=}"; shift ;;
+      -t | --time) TIMEOUT_HOURS="${2:?}"; shift 2 ;;
+      --time=*) TIMEOUT_HOURS="${1#*=}"; shift ;;
+      -p | --partition) PARTITION="${2:?}"; shift 2 ;;
+      --partition=*) PARTITION="${1#*=}"; shift ;;
+      --version) printf 'version: %s\n' "${SLURM_TOOLS_VERSION:-unknown}"; exit 0 ;;
+      -h | --help) "$usage_fn" ;;
+      --) shift; SLURM_TOOLS_POSITIONAL+=("$@"); break ;;
+      -*) printf 'Invalid option: %s\n' "$1" >&2; "$usage_fn" ;;
+      *) SLURM_TOOLS_POSITIONAL+=("$@"); break ;;
+    esac
+  done
+}
+
+# Shared post-parse preparation for st alloc / st submit.
 # Reads the standard job vars as globals (JOB_NAME, NODE_COUNT, CPU_CORE,
 # MEM_GB, GPU_TYPE, GPU_COUNT, TIMEOUT_HOURS, PARTITION); resolves a default
 # job name and partition, logs the parameters, and sets TIMEOUT_STRING and the
@@ -307,7 +349,7 @@ slurm_tools_alloc_script() {
 }
 
 # Path to a generated placeholder script that sleeps for 7 days. Used by
-# slurm-submit when no SCRIPT is given. Created on first use under the user
+# st submit when no SCRIPT is given. Created on first use under the user
 # cache dir so it persists at a stable absolute path while the job queues/runs.
 slurm_tools_dummy_script() {
   local cache_dir="${HOME}/.cache/slurm_tools"
@@ -316,9 +358,9 @@ slurm_tools_dummy_script() {
     mkdir -p "$cache_dir"
     cat >"$script" <<'EOF'
 #!/bin/bash
-# Auto-generated placeholder by slurm-submit (no script provided).
+# Auto-generated placeholder by st submit (no script provided).
 # Holds the allocation by sleeping; Slurm kills it at the job time limit.
-echo "slurm-submit placeholder: sleeping 7 days on $(hostname)"
+echo "st submit placeholder: sleeping 7 days on $(hostname)"
 sleep 7d
 EOF
     chmod +x "$script"

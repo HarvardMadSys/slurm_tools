@@ -12,28 +12,31 @@ unset _src _target
 source "${SLURM_TOOLS_SCRIPT_DIR}/lib/slurm_common.sh"
 
 SLURM_TOOLS_VERSION="$(slurm_tools_read_version)"
+PROG="${SLURM_TOOLS_PROG:-$(basename "$0")}"
 job_id=""
 
 usage() {
-  echo "usage: $0 [-j JOB_NAME] [-n NODES] [-c CPU_CORE] [-m MEM_GB] [-u GPU_TYPE] [-g GPU_COUNT] [-t TIMEOUT_HOURS] [-p PARTITION]"
-  echo "default values: JOB_NAME derived, NODES=1, CPU_CORE=16, MEM_GB=256, GPU_TYPE=any, GPU_COUNT=1, TIMEOUT_HOURS=12, PARTITION=best"
-  echo "example: $0 -n 2 -c 64 -m 512 -g 4 -u h200 -t 24"
-  echo "gpu types: $(slurm_tools_gpu_types_help)"
-  echo ""
-  echo "Environment: SLURM_TOOLS_ALLOC_SCRIPT, SLURM_TOOLS_MIG_PARTITION,"
-  echo "  SLURM_TOOLS_SKIP_UPGRADE, SLURM_TOOLS_FORCE_UPGRADE_CHECK"
-  echo ""
-  echo "Options:"
-  echo "  -j JOB_NAME        Job name (default: derived from GPU count/type or username)"
-  echo "  -n NODES           Number of nodes (default: 1)"
-  echo "  -c CPU_CORE        CPU cores per node (default: 16)"
-  echo "  -m MEM_GB          Memory per node in GB (default: 256)"
-  echo "  -u GPU_TYPE        GPU type (default: any GPU type)"
-  echo "  -g GPU_COUNT       GPUs per node (default: 1; use 0 for CPU-only)"
-  echo "  -t TIMEOUT_HOURS   Timeout in hours (default: 12)"
-  echo "  -p PARTITION       Partition (default: best; uses best-partition when best)"
-  echo "  -v                 Show version"
-  echo "  -h                 Show this help message"
+  cat <<EOF
+usage: ${PROG} [-J JOB_NAME] [-N NODES] [-c CPUS] [-m MEM_GB] [-G GPU_TYPE] [-g GPUS] [-t HOURS] [-p PARTITION]
+default values: JOB_NAME derived, NODES=1, CPUS=16, MEM_GB=256, GPU_TYPE=any, GPUS=1, HOURS=12, PARTITION=best
+example: ${PROG} -N 2 -c 64 -m 512 -g 4 -G h200 -t 24
+gpu types: $(slurm_tools_gpu_types_help)
+
+Environment: SLURM_TOOLS_ALLOC_SCRIPT, SLURM_TOOLS_MIG_PARTITION,
+  SLURM_TOOLS_SKIP_UPGRADE, SLURM_TOOLS_FORCE_UPGRADE_CHECK
+
+Options:
+  -J, --job-name NAME    Job name (default: derived from GPU count/type or username)
+  -N, --nodes N          Number of nodes (default: 1)
+  -c, --cpus N           CPU cores per node (default: 16)
+  -m, --mem GB           Memory per node in GB (default: 256)
+  -G, --gpu-type TYPE    GPU type (default: any GPU type)
+  -g, --gpus N           GPUs per node (default: 1; use 0 for CPU-only)
+  -t, --time HOURS       Wall time in hours (default: 12)
+  -p, --partition NAME   Partition (default: best; auto-selects via 'st partition' logic)
+      --version          Show version
+  -h, --help             Show this help message
+EOF
   exit 1
 }
 
@@ -47,30 +50,12 @@ on_interrupt() {
 
 slurm_tools_maybe_auto_upgrade "$@"
 
-JOB_NAME=""
-NODE_COUNT=1
-CPU_CORE=16
-MEM_GB=256
-GPU_TYPE=""
-GPU_COUNT=1
-TIMEOUT_HOURS=12
-PARTITION="best"
-
-while getopts "vhj:n:c:m:g:u:t:p:" opt; do
-  case $opt in
-    j) JOB_NAME="$OPTARG" ;;
-    n) NODE_COUNT="$OPTARG" ;;
-    c) CPU_CORE="$OPTARG" ;;
-    m) MEM_GB="$OPTARG" ;;
-    u) GPU_TYPE="$OPTARG" ;;
-    g) GPU_COUNT="$OPTARG" ;;
-    t) TIMEOUT_HOURS="$OPTARG" ;;
-    p) PARTITION="$OPTARG" ;;
-    v) echo "version: ${SLURM_TOOLS_VERSION}" && exit 0 ;;
-    h) usage ;;
-    \?) echo "Invalid option -$OPTARG" >&2; usage ;;
-  esac
-done
+slurm_tools_set_job_defaults
+slurm_tools_parse_job_args usage "$@"
+if [[ "${#SLURM_TOOLS_POSITIONAL[@]}" -gt 0 ]]; then
+  slurm_tools_print_log "unexpected argument: ${SLURM_TOOLS_POSITIONAL[0]} (st alloc takes no script; use 'st submit' to run one)"
+  usage
+fi
 
 trap on_interrupt INT
 

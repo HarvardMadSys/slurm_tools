@@ -2,7 +2,7 @@
 
 This tool analyzes SLURM partition `TRESBillingWeights` and recommends the best partition to use based on your resource requirements.
 
-**By default, it uses available (unallocated) resources for more realistic recommendations.** Use `--total-resources` to use total partition capacity instead.
+**By default, it uses available (unallocated) resources for more realistic recommendations.** Use `--total` to use total partition capacity instead.
 
 ## Features
 
@@ -22,56 +22,56 @@ This tool analyzes SLURM partition `TRESBillingWeights` and recommends the best 
 
 ### Basic usage for CPU/Memory job (uses available resources by default):
 ```bash
-best-partition --cpu 4 --mem 8
+st partition --cpus 4 --mem 8
 ```
 
 ### For GPU jobs (uses available resources by default):
 ```bash
-best-partition --cpu 8 --mem 16 --gpu 1
+st partition --cpus 8 --mem 16 --gpus 1
 ```
 
 ### With time limit:
 ```bash
-best-partition --cpu 4 --mem 8 --time 96
+st partition --cpus 4 --mem 8 --time 96
 ```
 
 ### Show summary of all partitions (shows available resources by default):
 ```bash
-best-partition --summary
+st partition --summary
 ```
 
 ### Use total resources instead of available resources:
 ```bash
-best-partition --cpu 4 --mem 8 --gpu 1 --total-resources
+st partition --cpus 4 --mem 8 --gpus 1 --total
 ```
 
 ### Show summary with total resources:
 ```bash
-best-partition --summary --total-resources
+st partition --summary --total
 ```
 
 ### JSON output (includes available resources by default):
 ```bash
-best-partition --cpu 4 --mem 8 --json
+st partition --cpus 4 --mem 8 --json
 ```
 
 ### JSON output with total resources:
 ```bash
-best-partition --cpu 4 --mem 8 --total-resources --json
+st partition --cpus 4 --mem 8 --total --json
 ```
 
 ## Command-line Arguments
 
-- `--cpu`: Number of CPUs required (required unless using --summary)
+- `--cpus`: Number of CPUs required (required unless using --summary)
 - `--mem`: Memory required in GB (required unless using --summary)
-- `--gpu`: Number of GPUs required (default: 0)
+- `--gpus`: Number of GPUs required (default: 0)
 - `--time`: Maximum time required in hours (optional)
 - `--summary`: Show summary of all partitions (optional)
 - `--json`: Output results in JSON format (optional)
-- `--total-resources`: Use total resources instead of available resources for filtering and display (optional)
+- `--total`: Use total resources instead of available resources for filtering and display (optional)
 - `--gpu-type`: Filter by GPU type (e.g., a100, h100, v100) (optional)
 - `--gpu-memory`: Filter by GPU memory (e.g., 80gb, 40gb) (optional)
-- `--name-only`, `-n`: Print only the best partition name (for scripts)
+- `--name-only`: Print only the best partition name (for scripts)
 
 ## GPU Filtering
 
@@ -83,10 +83,10 @@ Filter partitions by GPU type (e.g., A100, H100, V100):
 
 ```bash
 # Find partitions with A100 GPUs
-best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+st partition --cpus 4 --mem 8 --gpus 1 --gpu-type a100
 
 # Find partitions with H100 GPUs
-best-partition --cpu 4 --mem 8 --gpu 2 --gpu-type h100
+st partition --cpus 4 --mem 8 --gpus 2 --gpu-type h100
 ```
 
 ### GPU Memory Filtering
@@ -95,10 +95,10 @@ Filter partitions by GPU memory size:
 
 ```bash
 # Find partitions with 80GB GPUs
-best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+st partition --cpus 4 --mem 8 --gpus 1 --gpu-memory 80gb
 
 # Find partitions with 40GB GPUs
-best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 40gb
+st partition --cpus 4 --mem 8 --gpus 1 --gpu-memory 40gb
 ```
 
 ### Combined GPU Filtering
@@ -107,7 +107,7 @@ Combine both GPU type and memory filtering:
 
 ```bash
 # Find partitions with A100 80GB GPUs specifically
-best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
+st partition --cpus 4 --mem 8 --gpus 1 --gpu-type a100 --gpu-memory 80gb
 ```
 
 ### GPU information in summary
@@ -115,7 +115,7 @@ best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100 --gpu-memory 80gb
 Summary mode includes a **GPUInfo** column (lowercased Gres strings aggregated from nodes):
 
 ```bash
-best-partition --summary
+st partition --summary
 ```
 
 Use `--gpu-type` / `--gpu-memory` to filter recommendations by substring match against that blob.
@@ -134,7 +134,7 @@ Override defaults with environment variables (space-separated partition names):
 3. **GPU Information** (when needed): Queries node-level GPU information to determine GPU types and memory
 4. **Parsing**: Extracts `TRESBillingWeights`, resource limits, and other metadata
 5. **Filtering**: Removes partitions that cannot meet your requirements:
-   - Insufficient CPUs, memory, or GPUs (available by default, or total if `--total-resources` is used)
+   - Insufficient CPUs, memory, or GPUs (available by default, or total if `--total` is used)
    - GPU type mismatch (if `--gpu-type` is specified)
    - GPU memory mismatch (if `--gpu-memory` is specified)
    - Time limits shorter than required
@@ -153,7 +153,7 @@ Override defaults with environment variables (space-separated partition names):
 - Provides more realistic recommendations based on current cluster state
 - Filters out partitions that don't have enough available resources right now
 
-### Total Resources Mode (`--total-resources`)
+### Total Resources Mode (`--total`)
 - Uses the total capacity of each partition
 - Shows theoretical maximum resources
 - May recommend partitions that appear to have capacity but are actually fully utilized
@@ -163,7 +163,7 @@ Override defaults with environment variables (space-separated partition names):
 
 ### Basic Usage (Available Resources - Default)
 ```bash
-$ best-partition --cpu 4 --mem 8 --gpu 1
+$ st partition --cpus 4 --mem 8 --gpus 1
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -189,7 +189,7 @@ Suggested sbatch command:
 
 ### GPU Type Filtering
 ```bash
-$ best-partition --cpu 4 --mem 8 --gpu 1 --gpu-type a100
+$ st partition --cpus 4 --mem 8 --gpus 1 --gpu-type a100
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -212,7 +212,7 @@ Best recommendation: gpu_test
 
 ### GPU Memory Filtering
 ```bash
-$ best-partition --cpu 4 --mem 8 --gpu 1 --gpu-memory 80gb
+$ st partition --cpus 4 --mem 8 --gpus 1 --gpu-memory 80gb
 
 Recommended partitions for your requirements (using available resources):
   CPUs: 4
@@ -229,7 +229,7 @@ Rank Partition            Cost       Max Time        Priority Available Resource
 
 ### Summary with GPU Information
 ```bash
-$ best-partition --summary
+$ st partition --summary
 
 Partition            CPU Wt     Mem Wt     GPU Wt     Max Time        State    AvailCPU AvailMemGB AvailGPU GPUInfo
 ---------------------------------------------------------------------------------------------------------------
@@ -254,6 +254,6 @@ The script helps you find the partition with the lowest total cost for your spec
 - For production workloads, avoid test partitions which typically have short time limits
 - **Available resources mode is the default** - it shows what's actually available right now rather than theoretical capacity
 - Available resources mode is particularly useful during busy periods when many partitions may appear to have capacity but are actually fully utilized
-- Use `--total-resources` when you need to see partition limits for planning purposes or when available resources aren't relevant
+- Use `--total` when you need to see partition limits for planning purposes or when available resources aren't relevant
 - **GPU filtering helps find the right hardware** - use `--gpu-type` and `--gpu-memory` to ensure you get the specific GPU hardware needed for your workload
 - Some partitions may not have complete GPU information (the GPU column is left blank) - this is normal for partitions with mixed GPU types or where GPU specs cannot be determined

@@ -1,14 +1,14 @@
-# print-alloc
+# st nodes
 
 Bash + awk over `scontrol`. Shows unallocated GPUs, CPUs, and memory per node in a partition (DOWN nodes omitted, sorted by most free resources first).
 
 ## Usage
 
 ```bash
-print-alloc
-print-alloc -p gpu_test
-print-alloc -p gpu_requeue -a
-print-alloc --help
+st nodes
+st nodes -p gpu_test
+st nodes -p gpu_requeue -a
+st nodes --help
 ```
 
 ## Options
