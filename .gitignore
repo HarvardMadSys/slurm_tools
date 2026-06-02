@@ -5,5 +5,3 @@ __pycache__/
 *.pyc
 .DS_Store
 **/.nfs0000*
-**/logs/*
-**/logs0/*
