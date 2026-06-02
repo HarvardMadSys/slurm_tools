@@ -184,14 +184,28 @@ slurm_tools_sbatch() {
   return 0
 }
 
+slurm_tools_job_field() {
+  local jid="$1" field="$2"
+  scontrol show job -o "$jid" 2>/dev/null | awk -v key="${field}=" '
+    {
+      for (i = 1; i <= NF; i++) {
+        if (index($i, key) == 1) {
+          print substr($i, length(key) + 1)
+          exit
+        }
+      }
+    }
+  '
+}
+
 slurm_tools_job_state() {
   local jid="$1"
-  scontrol show job "$jid" 2>/dev/null | awk -F= '/JobState=/{print $2; exit}' | awk '{print $1}'
+  slurm_tools_job_field "$jid" "JobState"
 }
 
 slurm_tools_job_nodelist() {
   local jid="$1"
-  scontrol show job "$jid" 2>/dev/null | awk -F= '/NodeList=/{print $2; exit}' | awk '{print $1}'
+  slurm_tools_job_field "$jid" "NodeList"
 }
 
 # Wait until job is RUNNING with a valid NodeList, then record nodes.
