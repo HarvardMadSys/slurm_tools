@@ -256,4 +256,4 @@ The script helps you find the partition with the lowest total cost for your spec
 - Available resources mode is particularly useful during busy periods when many partitions may appear to have capacity but are actually fully utilized
 - Use `--total-resources` when you need to see partition limits for planning purposes or when available resources aren't relevant
 - **GPU filtering helps find the right hardware** - use `--gpu-type` and `--gpu-memory` to ensure you get the specific GPU hardware needed for your workload
-- Some partitions may not have complete GPU information (showing "N/A") - this is normal for partitions with mixed GPU types or where GPU specs cannot be determined 
+- Some partitions may not have complete GPU information (the GPU column is left blank) - this is normal for partitions with mixed GPU types or where GPU specs cannot be determined

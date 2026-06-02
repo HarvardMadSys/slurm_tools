@@ -5,7 +5,7 @@ Small utilities for SLURM: partition recommendations from billing weights, alloc
 ## Requirements
 
 - SLURM client tools (`sbatch`, `squeue`, `scontrol`).
-- Bash for `best-partition`, `print-alloc`, and `slurm-alloc`.
+- Bash for `best-partition`, `print-alloc`, `slurm-alloc`, and `slurm-submit`.
 - Python 3.6+ for `node-monitor` only (stdlib; needs SSH to compute nodes).
 
 ## Install

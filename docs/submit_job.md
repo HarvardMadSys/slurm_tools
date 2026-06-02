@@ -34,7 +34,7 @@ When `SCRIPT` is provided, behaviour is unchanged: slurm-submit prints the job I
 
 ## Notes
 
-- Requires `best-partition` in PATH when `-p best`.
+- Resolves the partition with `best-partition` when `-p best` (falls back to the `best_partition` alias or the bundled `best_partition.sh`).
 - Creates `logs/` and validates `sbatch` success.
 - Same auto-upgrade env vars as `slurm-alloc` (`SLURM_TOOLS_SKIP_UPGRADE`, etc.).
 - Shared helpers live in `lib/slurm_common.sh`.
