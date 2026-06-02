@@ -83,29 +83,7 @@ else
 fi
 SCRIPT_DIR_ABS="$(cd "$(dirname "$SCRIPT_ABS")" && pwd)"
 
-if [[ -z "${JOB_NAME}" ]]; then
-  JOB_NAME="$(slurm_tools_default_job_name "$GPU_COUNT" "$GPU_TYPE")"
-fi
-
-PARTITION_WAS_BEST=0
-[[ "${PARTITION}" == "best" ]] && PARTITION_WAS_BEST=1
-PARTITION="$(slurm_tools_resolve_partition "$PARTITION" "$CPU_CORE" "$MEM_GB" "$GPU_COUNT" "$GPU_TYPE" "$TIMEOUT_HOURS" "$NODE_COUNT")" || true
-if [[ -z "${PARTITION}" ]]; then
-  slurm_tools_print_log "No suitable partitions found for your requirements."
-  exit 1
-fi
-if [[ "$PARTITION_WAS_BEST" -eq 1 ]]; then
-  slurm_tools_print_log "best partition: ${PARTITION}"
-fi
-
-slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE:-any}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}, SCRIPT=${SCRIPT}"
-
-TIMEOUT_STRING="$(slurm_tools_timeout_string "$TIMEOUT_HOURS")"
-
-if ! slurm_tools_build_gres_args "$GPU_TYPE" "$GPU_COUNT"; then
-  slurm_tools_print_log "Invalid GPU type: ${GPU_TYPE}"
-  exit 1
-fi
+slurm_tools_prepare_job ", SCRIPT=${SCRIPT}"
 
 if ! slurm_tools_sbatch -p "${PARTITION}" \
   -J "${JOB_NAME}" \

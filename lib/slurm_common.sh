@@ -187,6 +187,37 @@ slurm_tools_resolve_partition() {
   fi
 }
 
+# Shared post-getopts preparation for slurm-alloc / slurm-submit.
+# Reads the standard job vars as globals (JOB_NAME, NODE_COUNT, CPU_CORE,
+# MEM_GB, GPU_TYPE, GPU_COUNT, TIMEOUT_HOURS, PARTITION); resolves a default
+# job name and partition, logs the parameters, and sets TIMEOUT_STRING and the
+# GRES_ARGS array. $1 is optional extra text appended to the parameters log
+# (e.g. ", SCRIPT=foo"). Exits non-zero on unresolved partition / bad GPU type.
+slurm_tools_prepare_job() {
+  local extra="${1:-}" was_best=0
+
+  if [[ -z "${JOB_NAME}" ]]; then
+    JOB_NAME="$(slurm_tools_default_job_name "$GPU_COUNT" "$GPU_TYPE")"
+  fi
+
+  [[ "${PARTITION}" == "best" ]] && was_best=1
+  PARTITION="$(slurm_tools_resolve_partition "$PARTITION" "$CPU_CORE" "$MEM_GB" "$GPU_COUNT" "$GPU_TYPE" "$TIMEOUT_HOURS" "$NODE_COUNT")" || true
+  if [[ -z "${PARTITION}" ]]; then
+    slurm_tools_print_log "No suitable partitions found for your requirements."
+    exit 1
+  fi
+  [[ "$was_best" -eq 1 ]] && slurm_tools_print_log "best partition: ${PARTITION}"
+
+  slurm_tools_print_log "parameters: JOB_NAME=${JOB_NAME}, NODES=${NODE_COUNT}, CPU_CORE=${CPU_CORE}, MEM_GB=${MEM_GB}, GPU_TYPE=${GPU_TYPE:-any}, GPU_COUNT=${GPU_COUNT}, TIMEOUT_HOURS=${TIMEOUT_HOURS}, PARTITION=${PARTITION}${extra}"
+
+  TIMEOUT_STRING="$(slurm_tools_timeout_string "$TIMEOUT_HOURS")"
+
+  if ! slurm_tools_build_gres_args "$GPU_TYPE" "$GPU_COUNT"; then
+    slurm_tools_print_log "Invalid GPU type: ${GPU_TYPE}"
+    exit 1
+  fi
+}
+
 # Submit via sbatch; sets SLURM_TOOLS_JOB_ID on success.
 slurm_tools_sbatch() {
   local out rc
