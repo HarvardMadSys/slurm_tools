@@ -89,18 +89,6 @@ avail_and_blob_stream() {
       if (substr(ln, 1, 11) == "RealMemory=") rmem = fvnum(ln)
       if (substr(ln, 1, 5) == "Gres=") gres = fv(ln)
     }
-    if (down) next
-    ac = ag = mb = 0
-    if (match(alc, /cpu=[0-9]+/)) { x = substr(alc, RSTART + 4, RLENGTH - 4); ac = x + 0 }
-    if (match(alc, /gres\/gpu=[0-9]+/)) { x = substr(alc, RSTART + 9, RLENGTH - 9); ag = x + 0 }
-    if (match(alc, /mem=[0-9]+[MG]?/)) {
-      x = substr(alc, RSTART + 4, RLENGTH - 4)
-      ut = substr(x, length(x), 1)
-      if (ut == "G" || ut == "M") {
-        vv = substr(x, 1, length(x) - 1) + 0
-        mb = (ut == "G" ? vv * 1024 : vv)
-      } else mb = x + 0
-    }
     node_gpus = 0
     g2 = gres; gsub(/\([^)]*\)/, "", g2)
     gres_n = split(g2, gres_parts, ",")
@@ -119,6 +107,18 @@ avail_and_blob_stream() {
         sep = blob == "" ? "" : ", "
         blob = blob sep tolower(gpu_desc)
       }
+    }
+    if (down) next
+    ac = ag = mb = 0
+    if (match(alc, /cpu=[0-9]+/)) { x = substr(alc, RSTART + 4, RLENGTH - 4); ac = x + 0 }
+    if (match(alc, /gres\/gpu=[0-9]+/)) { x = substr(alc, RSTART + 9, RLENGTH - 9); ag = x + 0 }
+    if (match(alc, /mem=[0-9]+[MG]?/)) {
+      x = substr(alc, RSTART + 4, RLENGTH - 4)
+      ut = substr(x, length(x), 1)
+      if (ut == "G" || ut == "M") {
+        vv = substr(x, 1, length(x) - 1) + 0
+        mb = (ut == "G" ? vv * 1024 : vv)
+      } else mb = x + 0
     }
     cpus += ((efctv - ac) >= 0 ? efctv - ac : 0)
     amb += ((rmem - mb) >= 0 ? rmem - mb : 0)
@@ -194,10 +194,13 @@ function emit(blk,    gn,LL,j,ln,v,nm,maxt,tres,wt,st,prio,nl_raw,tcpus,tnodes,t
   if(match(tres,/gres\/gpu=[0-9]+/)){
     tt=substr(tres,RSTART+9); sub(/([^0-9]).*/,"",tt); tgpu=tt+0
   }
-  # Extract GPU type string from TRES (e.g. gres/gpu:nvidia_h200=88 -> nvidia_h200)
-  tgt=""
-  if(match(tres,/gres\/gpu:[^=,]+=[0-9]+/)){
-    tgt=substr(tres,RSTART+9,RLENGTH-9); sub(/=[0-9]+$/,"",tgt)
+  # Extract all GPU type strings from TRES (e.g. "nvidia_a100-sxm4-80gb,nvidia_h200")
+  tgt=""; tmp=tres
+  while(match(tmp,/gres\/gpu:[^=,]+=[0-9]+/)){
+    seg=substr(tmp,RSTART,RLENGTH)
+    sub(/^gres\/gpu:/,"",seg); sub(/=[0-9]+$/,"",seg)
+    tgt=(tgt==""?"":tgt",")tolower(seg)
+    tmp=substr(tmp,RSTART+RLENGTH)
   }
   wc=wm=wgg=0
   n=split(wt,parts,",")
