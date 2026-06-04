@@ -39,6 +39,7 @@ Options:
   -g, --gpus N           GPUs per node (default: 1; use 0 for CPU-only)
   -t, --time HOURS       Wall time in hours (default: 12)
   -p, --partition NAME   Partition (default: best; auto-selects via 'st partition' logic)
+  -x, --exclude LIST     Comma-separated partitions to exclude from auto-selection
       --version          Show version
   -h, --help             Show this help message
 EOF

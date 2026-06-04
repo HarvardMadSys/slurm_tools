@@ -71,6 +71,7 @@ st partition --cpus 4 --mem 8 --total --json
 - `--total`: Use total resources instead of available resources for filtering and display (optional)
 - `--gpu-type`: Filter by GPU type (e.g., a100, h100, v100) (optional)
 - `--gpu-memory`: Filter by GPU memory (e.g., 80gb, 40gb) (optional)
+- `--exclude`, `-x`: Comma-separated list of partition names to exclude (optional)
 - `--name-only`: Print only the best partition name (for scripts)
 
 ## GPU Filtering
@@ -119,6 +120,25 @@ st partition --summary
 ```
 
 Use `--gpu-type` / `--gpu-memory` to filter recommendations by substring match against that blob.
+
+### Excluding partitions
+
+Use `--exclude` (or `-x`) to skip specific partitions in a single invocation:
+
+```bash
+# Exclude a partition from recommendations
+st partition -c 16 -m 64 -g 1 -G h200 --exclude gpu_h200
+
+# Exclude multiple partitions (comma-separated)
+st partition -c 16 -m 64 -g 1 --exclude seas_gpu,gpu_h200
+```
+
+The same flag works on `st alloc` and `st submit` to exclude partitions from auto-selection:
+
+```bash
+st alloc -g 1 -G h200 --exclude gpu_h200
+st submit -g 2 --exclude seas_gpu,gpu_h200 train.sh
+```
 
 ### Partition skip lists (site-specific)
 

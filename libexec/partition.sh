@@ -7,7 +7,7 @@ PROG="${SLURM_TOOLS_PROG:-$(basename "$0")}"
 usage() {
   cat <<EOF
 usage: ${PROG} [-c|--cpus N] [-m|--mem GB] [-g|--gpus N] [-G|--gpu-type STR]
-       [--gpu-memory STR] [-t|--time HOURS] [-s|--summary] [--json] [--name-only] [--total]
+       [--gpu-memory STR] [-t|--time HOURS] [-x|--exclude LIST] [-s|--summary] [--json] [--name-only] [--total]
 
 Requires -c/--cpus and -m/--mem unless --summary.
 
@@ -18,6 +18,7 @@ Options:
   -G, --gpu-type STR  Filter to partitions whose GPUs match STR (e.g. h100)
       --gpu-memory STR  Filter by GPU memory substring (e.g. 80gb)
   -t, --time HOURS    Minimum max-time the partition must allow
+  -x, --exclude LIST  Comma-separated partition names to exclude
   -s, --summary       Show a table of all partitions instead of a recommendation
       --total         Use total capacity instead of currently-available resources
       --json          Output JSON
@@ -30,7 +31,7 @@ abort() { printf "%s\n" "$*" >&2; exit 1; }
 
 quiet() { [[ "$NAMEONLY" == "1" || "$JSON_OUT" == "1" ]] && return 0; printf "%s\n" "$*"; }
 
-CPU=""; MEM=""; GPU=0; TIME=""; SUMMARY=0; JSON_OUT=0; NAMEONLY=0; TOTAL_RES=0; GPUTYPE=""; GPUMEM=""
+CPU=""; MEM=""; GPU=0; TIME=""; SUMMARY=0; JSON_OUT=0; NAMEONLY=0; TOTAL_RES=0; GPUTYPE=""; GPUMEM=""; EXCLUDE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +52,8 @@ while [[ $# -gt 0 ]]; do
     -G|--gpu-type) GPUTYPE="${2:?}"; shift 2 ;;
     --gpu-memory=* ) GPUMEM="${1#*=}"; shift ;;
     --gpu-memory) GPUMEM="${2:?}"; shift 2 ;;
+    --exclude=* ) EXCLUDE="${1#*=}"; shift ;;
+    -x|--exclude) EXCLUDE="${2:?}"; shift 2 ;;
     *) abort "unknown argument: $1" ;;
   esac
 done
@@ -292,6 +295,12 @@ while IFS='|' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am ag 
       [[ "$nm" == "$skip" ]] && continue 2
     done
   fi
+  if [[ -n "$EXCLUDE" ]]; then
+    IFS=',' read -ra _excl <<< "$EXCLUDE"
+    for skip in "${_excl[@]}"; do
+      [[ "$nm" == "$skip" ]] && continue 2
+    done
+  fi
 
   if [[ -n "$GPUTYPE" ]]; then
     bt="$(lc "$blob")"; gt="$(lc "$GPUTYPE")"; [[ "$bt" == *"${gt}"* ]] || continue
@@ -403,6 +412,7 @@ quiet "  Memory: ${MEM} GB"
 quiet "  GPUs: ${req_gpu}"
 [[ -n "${GPUTYPE:-}" ]] && quiet "  GPU type: ${GPUTYPE}"
 [[ -n "${GPUMEM:-}" ]] && quiet "  GPU memory: ${GPUMEM}"
+[[ -n "${EXCLUDE:-}" ]] && quiet "  Excluded: ${EXCLUDE}"
 [[ -n "${TIME:-}" ]] && quiet "  Max time: ${TIME} hours"
 quiet ""
 

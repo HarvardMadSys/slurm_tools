@@ -163,8 +163,11 @@ slurm_tools_resolve_partition() {
     [[ -n "$gpu_type" ]] && bp_gpu_args+=(--gpu-type "$gpu_type")
   fi
 
+  local bp_exclude_args=()
+  [[ -n "${EXCLUDE_PARTITIONS:-}" ]] && bp_exclude_args=(--exclude "$EXCLUDE_PARTITIONS")
+
   local result
-  result="$("${best_partition_cmd}" --name-only -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" --name-only -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" "${bp_exclude_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     printf '%s' "$result"
     return 0
@@ -172,7 +175,7 @@ slurm_tools_resolve_partition() {
 
   # No partition found using currently available resources; retry against total capacity.
   slurm_tools_print_log "warning: no partition has enough free resources right now; retrying against total capacity" >&2
-  result="$("${best_partition_cmd}" --name-only --total -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" -t "$timeout")"
+  result="$("${best_partition_cmd}" --name-only --total -c "$total_cpu" -m "$total_mem" "${bp_gpu_args[@]}" "${bp_exclude_args[@]}" -t "$timeout")"
   if [[ -n "$result" ]]; then
     slurm_tools_print_log "warning: ${result} may be fully allocated; job will queue" >&2
     printf '%s' "$result"
@@ -190,6 +193,7 @@ slurm_tools_set_job_defaults() {
   GPU_COUNT=1
   TIMEOUT_HOURS=12
   PARTITION="best"
+  EXCLUDE_PARTITIONS=""
 }
 
 # Parse the shared resource flags for `st alloc` / `st submit`. Sets the job
@@ -220,6 +224,8 @@ slurm_tools_parse_job_args() {
       --time=*) TIMEOUT_HOURS="${1#*=}"; shift ;;
       -p | --partition) PARTITION="${2:?}"; shift 2 ;;
       --partition=*) PARTITION="${1#*=}"; shift ;;
+      -x | --exclude) EXCLUDE_PARTITIONS="${2:?}"; shift 2 ;;
+      --exclude=*) EXCLUDE_PARTITIONS="${1#*=}"; shift ;;
       --version) printf 'version: %s\n' "${SLURM_TOOLS_VERSION:-unknown}"; exit 0 ;;
       -h | --help) "$usage_fn" ;;
       --) shift; SLURM_TOOLS_POSITIONAL+=("$@"); break ;;

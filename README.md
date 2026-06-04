@@ -21,7 +21,7 @@ mkdir -p ~/.local/share/slurm_tools && curl -fsSL https://codeload.github.com/Ha
 
 ## Commands
 
-`st` dispatches to one subcommand per tool. Flags mirror `sbatch` where they overlap (`-N` nodes, `-J` job-name, `-c` cpus, `-G` gpu-type, `-t` time, `-p` partition); every flag has a long form too.
+`st` dispatches to one subcommand per tool. Flags mirror `sbatch` where they overlap (`-N` nodes, `-J` job-name, `-c` cpus, `-G` gpu-type, `-t` time, `-p` partition); every flag has a long form too. Use `-x`/`--exclude` on any command to skip specific partitions from auto-selection.
 
 | Command | Script | Purpose |
 |---------|--------|---------|
@@ -43,6 +43,9 @@ st submit -c 16 -m 256 -g 1 -G h100 train.sh
 st partition -c 4 -m 8
 # find the best partition for a GPU job needing 4 CPUs and 8GB memory on H100s
 st partition -c 4 -m 8 -g 1 -G h100 --name-only   # partition name only
+# exclude specific partitions from auto-selection
+st partition -c 16 -m 64 -g 1 -G h200 --exclude gpu_h200
+st alloc -g 1 -G h200 --exclude seas_gpu,gpu_h200
 # list the available resources on each node in the gpu_requeue partition
 st nodes -p gpu_requeue
 st monitor 12345 --json | jq .                      # progress on stderr
