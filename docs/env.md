@@ -12,7 +12,9 @@ override them in your shell rc or via `export` before running any tool.
 **Used by:** every `st` invocation
 
 Path to the shared usage log. Each invocation appends one tab-separated record
-containing a UTC timestamp, resolved username, and shell-escaped command.
+containing a UTC timestamp, resolved username, hostname, shell-escaped working
+directory, `st` version, Slurm job ID (`-` when unset), and shell-escaped
+command.
 
 ```bash
 export SLURM_TOOLS_USAGE_LOG="/scratch/st/usage_$(hostname).log"
