@@ -5,6 +5,29 @@ override them in your shell rc or via `export` before running any tool.
 
 ---
 
+## Usage tracking
+
+### `SLURM_TOOLS_USAGE_LOG`
+
+**Used by:** every `st` invocation
+
+Path to the shared usage log. Each invocation appends one tab-separated record
+containing a UTC timestamp, resolved username, and shell-escaped command.
+
+```bash
+export SLURM_TOOLS_USAGE_LOG="/scratch/st/usage_$(hostname).log"
+```
+
+Default: `/scratch/st/usage_$(hostname).log`
+
+The parent directory and file are created on a best-effort basis with modes
+`1777` and `0666`, respectively. Pre-create them with tighter group permissions
+or ACLs when required. Logging failures never prevent `st` from running.
+The log contains full command arguments and is intended for usage tracking, not
+tamper-resistant auditing.
+
+---
+
 ## Site configuration
 
 ### `SLURM_TOOLS_ALLOC_SCRIPT`

@@ -14,22 +14,10 @@ Small utilities for SLURM, exposed as a single `st` command: partition recommend
 
 ## Install
 
-**Without cloning** (installs to `~/.local/share/slurm_tools`; keep that directory):
-
 ```bash
 mkdir -p ~/.local/share/slurm_tools && curl -fsSL https://codeload.github.com/HarvardMadSys/slurm_tools/tar.gz/main | tar -xz --strip-components=1 -C ~/.local/share/slurm_tools && ~/.local/share/slurm_tools/install.sh
 ```
 
-**From a clone:**
-
-```bash
-# Installs a single command, `st`, into `~/.local/bin`. Reload your shell or `source` the rc file `install.sh` updated, then run `st help` to list subcommands.
-./install.sh
-```
-
-
-
-Version is stored in `VERSION` at the install root. Upgrades replace the install tree (`rsync --delete` when available); a git checkout used as `SLURM_TOOLS_ROOT` may lose `.git`. See `st upgrade --help` for `SLURM_TOOLS_ROOT`, `SLURM_TOOLS_BRANCH`, and `SLURM_TOOLS_REPO`.
 
 ## Commands
 
@@ -60,20 +48,6 @@ st nodes -p gpu_requeue
 st monitor 12345 --json | jq .                      # progress on stderr
 ```
 
-## Site configuration
-
-Defaults target a Harvard FASRC-style cluster. Override with environment variables — see [docs/env.md](docs/env.md) for full details.
-
-| Variable | Used by | Default |
-|----------|---------|---------|
-| `SLURM_TOOLS_ALLOC_SCRIPT` | `st alloc` | Harvard lab sleep script |
-| `SLURM_TOOLS_DEFAULT_PARTITION` | `st nodes` | `gpu_requeue` |
-| `SLURM_TOOLS_MIG_PARTITION` | `st alloc`, `st submit` | `gpu_test` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB` | `st partition` | `serial_requeue` |
-| `SLURM_TOOLS_SKIP_PARTITIONS_CPU_JOB` | `st partition` | `gpu_requeue gpu_test` |
-| `SLURM_TOOLS_SKIP_UPGRADE` | `st alloc`, `st submit` | unset |
-| `SLURM_TOOLS_FORCE_UPGRADE_CHECK` | `st alloc`, `st submit` | unset |
-
 ## Docs
 
 | Tool | Doc |
@@ -85,8 +59,3 @@ Defaults target a Harvard FASRC-style cluster. Override with environment variabl
 | `st monitor` | [docs/monitor.md](docs/monitor.md) |
 | environment variables | [docs/env.md](docs/env.md) |
 
-## Notes on `st alloc`
-
-`libexec/alloc.sh` uses a cluster-specific default for the placeholder sleep script. Set `SLURM_TOOLS_ALLOC_SCRIPT` on other sites.
-
-On each run, `st alloc` may auto-upgrade from GitHub (at most once per 24h). Disable with `SLURM_TOOLS_SKIP_UPGRADE=1`; force a check with `SLURM_TOOLS_FORCE_UPGRADE_CHECK=1`.
