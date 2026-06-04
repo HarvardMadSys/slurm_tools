@@ -11,19 +11,28 @@ SLURM_TOOLS_SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
 export SLURM_TOOLS_SCRIPT_DIR
 unset _src _target
 
-log_usage() {
-  local log_file log_dir hostname_value timestamp user command quoted arg
+read_version() {
+  if [[ -f "${SLURM_TOOLS_SCRIPT_DIR}/VERSION" ]]; then
+    tr -d '[:space:]' <"${SLURM_TOOLS_SCRIPT_DIR}/VERSION" | head -n1
+  else
+    printf 'unknown'
+  fi
+}
 
+log_usage() {
+  local log_file log_dir hostname_value hostname_file timestamp user
+  local cwd_value cwd version slurm_job_id command quoted arg
+
+  if ! hostname_value="$(hostname 2>/dev/null)" || [[ -z "$hostname_value" ]]; then
+    hostname_value="unknown"
+  fi
+  hostname_value="${hostname_value//$'\t'/ }"
+  hostname_value="${hostname_value//$'\n'/ }"
   if [[ -n "${SLURM_TOOLS_USAGE_LOG:-}" ]]; then
     log_file="$SLURM_TOOLS_USAGE_LOG"
   else
-    if ! hostname_value="$(hostname 2>/dev/null)" || [[ -z "$hostname_value" ]]; then
-      hostname_value="unknown"
-    fi
-    hostname_value="${hostname_value//\//_}"
-    hostname_value="${hostname_value//$'\t'/_}"
-    hostname_value="${hostname_value//$'\n'/_}"
-    log_file="/scratch/st/usage_${hostname_value}.log"
+    hostname_file="${hostname_value//\//_}"
+    log_file="/scratch/st/usage_${hostname_file}.log"
   fi
 
   if ! timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
@@ -34,6 +43,12 @@ log_usage() {
   fi
   user="${user//$'\t'/ }"
   user="${user//$'\n'/ }"
+  if ! cwd_value="$(pwd -P 2>/dev/null)"; then
+    cwd_value="${PWD:-unknown}"
+  fi
+  printf -v cwd '%q' "$cwd_value"
+  version="$(read_version)"
+  printf -v slurm_job_id '%q' "${SLURM_JOB_ID:--}"
 
   printf -v command '%q' "st"
   for arg in "$@"; do
@@ -53,19 +68,16 @@ log_usage() {
     if command -v flock >/dev/null 2>&1; then
       flock -w 1 -x 9 || true
     fi
-    printf '%s\t%s\t%s\n' "$timestamp" "$user" "$command" >&9
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$timestamp" "$user" "$hostname_value" "$cwd" "$version" "$slurm_job_id" "$command" >&9
   ) 2>/dev/null || true
 }
 
 log_usage "$@"
 
-read_version() {
-  if [[ -f "${SLURM_TOOLS_SCRIPT_DIR}/VERSION" ]]; then
-    tr -d '[:space:]' <"${SLURM_TOOLS_SCRIPT_DIR}/VERSION" | head -n1
-  else
-    printf 'unknown'
-  fi
-}
+# shellcheck source=lib/slurm_common.sh
+source "${SLURM_TOOLS_SCRIPT_DIR}/lib/slurm_common.sh"
+SLURM_TOOLS_VERSION="$(slurm_tools_read_version)"
 
 usage() {
   cat <<'EOF'
@@ -89,6 +101,11 @@ EOF
 
 cmd="${1:-help}"
 shift || true
+
+case "$cmd" in
+  upgrade | help | version | -h | --help | --version | -V) ;;
+  *) slurm_tools_maybe_auto_upgrade "$cmd" "$@" ;;
+esac
 
 case "$cmd" in
   alloc)

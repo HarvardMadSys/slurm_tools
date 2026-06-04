@@ -42,8 +42,6 @@ EOF
   exit 1
 }
 
-slurm_tools_maybe_auto_upgrade "$@"
-
 slurm_tools_set_job_defaults
 slurm_tools_parse_job_args usage "$@"
 
