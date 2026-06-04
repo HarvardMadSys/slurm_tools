@@ -28,7 +28,7 @@ EOF
 
 abort() { printf "%s\n" "$*" >&2; exit 1; }
 
-quiet() { [[ "$NAMEONLY" == "1" ]] && return 0; printf "%s\n" "$*"; }
+quiet() { [[ "$NAMEONLY" == "1" || "$JSON_OUT" == "1" ]] && return 0; printf "%s\n" "$*"; }
 
 CPU=""; MEM=""; GPU=0; TIME=""; SUMMARY=0; JSON_OUT=0; NAMEONLY=0; TOTAL_RES=0; GPUTYPE=""; GPUMEM=""
 
@@ -102,15 +102,27 @@ avail_and_blob_stream() {
       } else mb = x + 0
     }
     node_gpus = 0
-    if (gres ~ /nvidia/) {
-      g2 = gres; gsub(/\([^)]*\)/, "", g2)
-      if (match(g2, /:[0-9]+$/)) node_gpus = substr(g2, RSTART + 1, RLENGTH - 1) + 0
+    g2 = gres; gsub(/\([^)]*\)/, "", g2)
+    gres_n = split(g2, gres_parts, ",")
+    for (gres_i = 1; gres_i <= gres_n; gres_i++) {
+      gres_entry = gres_parts[gres_i]
+      sub(/^[[:space:]]+/, "", gres_entry)
+      sub(/[[:space:]]+$/, "", gres_entry)
+      if (substr(gres_entry, 1, 4) != "gpu:") continue
+      if (match(gres_entry, /:[0-9]+$/)) {
+        node_gpus += substr(gres_entry, RSTART + 1, RLENGTH - 1) + 0
+      }
+      gpu_desc = gres_entry
+      sub(/^gpu:/, "", gpu_desc)
+      sub(/:[0-9]+$/, "", gpu_desc)
+      if (gpu_desc !~ /^[0-9]+$/ && !seen_gpu[gpu_desc]++) {
+        sep = blob == "" ? "" : ", "
+        blob = blob sep tolower(gpu_desc)
+      }
     }
     cpus += ((efctv - ac) >= 0 ? efctv - ac : 0)
     amb += ((rmem - mb) >= 0 ? rmem - mb : 0)
     gpu += ((node_gpus - ag) >= 0 ? node_gpus - ag : 0)
-    cg = gres; sub(/^gpu:/, "", cg); gsub(/\([^)]*\)/, "", cg)
-    if (length(cg) > 0) { sep = blob == "" ? "" : " "; blob = blob sep tolower(cg) }
   }
   END { printf ("%s|%d|%d|%d\n", blob, cpus, amb, gpu) }
   function fv(line, idx, tail) {
@@ -200,7 +212,7 @@ function emit(blk,    gn,LL,j,ln,v,nm,maxt,tres,wt,st,prio,nl_raw,tcpus,tnodes,t
     else if(kk=="Mem") wm=vv+0
     else if(kk=="Gres/gpu") wgg=vv+0
   }
-  printf("%s\t%s\t%d\t%d\t%d\t%d\t%s\t%d\t%.17g\t%.17g\t%.17g\t%s\t%s\n", nm,maxt,tcpus,tnodes,tmem,tgpu,st,prio,wc,wm,wgg,tgt,nl_raw)
+  printf("%s|%s|%d|%d|%d|%d|%s|%d|%.17g|%.17g|%.17g|%s|%s\n", nm,maxt,tcpus,tnodes,tmem,tgpu,st,prio,wc,wm,wgg,tgt,nl_raw)
 }
 { lines[++nr]=$0 }
 END{
@@ -215,7 +227,7 @@ END{
 AWK
 
 : >"$ENR"
-while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg tgt nl; do
+while IFS='|' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg tgt nl; do
   need_blob=0
   [[ "$SUMMARY" == "1" || "$GPU" != "0" || -n "${GPUTYPE}${GPUMEM}" ]] && need_blob=1
   ac="$tcpus"; am="$tmem"; ag="$tgpu"; blob="$tgt"
@@ -224,13 +236,14 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg tgt nl;
     skip_node=0
     if [[ -n "$GPUTYPE" ]]; then
       bt="$(lc "$tgt")"; gt="$(lc "$GPUTYPE")"
-      [[ "$bt" != *"${gt}"* ]] && skip_node=1
+      [[ -n "$bt" && "$bt" != *"${gt}"* ]] && skip_node=1
     fi
     if [[ "$skip_node" == "0" ]]; then
       IFS='|' read -r blob ac am ag < <(scontrol show node "$nl" | avail_and_blob_stream)
+      [[ -z "$blob" && -n "$tgt" ]] && blob="$tgt"
     fi
   fi
-  printf '%s\t%s\t%d\t%d\t%d\t%d\t%s\t%d\t%.17g\t%.17g\t%.17g\t%d\t%d\t%d\t%s\n' \
+  printf '%s|%s|%d|%d|%d|%d|%s|%d|%.17g|%.17g|%.17g|%d|%d|%d|%s\n' \
     "$nm" "$maxt" "$tcpus" "$tnodes" "$tmem" "$tgpu" "$st" "$prio" "$wc" "$wm" "$wgg" \
     "${ac:-0}" "${am:-0}" "${ag:-0}" "$blob" >>"$ENR"
 done < <(LC_ALL=C awk -f "$split_prog" "$RAW")
@@ -239,7 +252,7 @@ if [[ "$SUMMARY" == "1" ]]; then
   quiet "Fetching available resources..."
   quiet "Fetching GPU information..."
   tab=$'\t'
-  LC_ALL=C awk -F'\t' -v OFS="$tab" -v show_avail="$HAVE_AVAIL" '
+  LC_ALL=C awk -F'|' -v OFS="$tab" -v show_avail="$HAVE_AVAIL" '
   BEGIN{
     printf("%-20s %-10s %-10s %-10s %-15s %-8s", "Partition", "CPU Wt", "Mem Wt", "GPU Wt", "Max Time", "State")
     if(show_avail) printf("%s", " AvailCPU AvailMemGB AvailGPU GPUInfo\n")
@@ -265,7 +278,7 @@ req_h="${TIME:-}"
 need_time=0; [[ -n "${TIME:-}" ]] && need_time=1
 
 : >"$CANDS"
-while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am ag blob; do
+while IFS='|' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am ag blob; do
   [[ "$st" == "UP" ]] || continue
   if [[ "$req_gpu" -gt 0 ]]; then
     for skip in ${SLURM_TOOLS_SKIP_PARTITIONS_GPU_JOB:-serial_requeue}; do
@@ -305,7 +318,7 @@ while IFS=$'\t' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am a
 
   cost="$(LC_ALL=C awk -v c="$req_cpu" -v m="$MEM" -v g="$req_gpu" -v wc="$wc" -v wm="$wm" -v wgg="$wgg" \
     'BEGIN{printf "%.12f", (c+0)*wc + (m+0)*wm + (g+0)*wgg}')"
-  printf '%s\t%d\t%s\t%s\t%.17g\t%.17g\t%.17g\t%d\t%d\t%d\t%s\t%d\t%d\t%d\n' \
+  printf '%s|%d|%s|%s|%.17g|%.17g|%.17g|%d|%d|%d|%s|%d|%d|%d\n' \
     "$cost" "$prio" "$nm" "$maxt" "$wc" "$wm" "$wgg" "$ac" "$am" "$ag" "$blob" "$tcpus" "$tmem" "$tgpu" >>"$CANDS"
 done <"$ENR"
 
@@ -316,12 +329,30 @@ fi
 
 SORTED="$(mktemp)"
 trap 'rm -f "$RAW" "$ENR" "$CANDS" "$split_prog" "$SORTED"' EXIT
-LC_ALL=C sort -s -t $'\t' -k1,1n -k2,2n "$CANDS" >"$SORTED"
+LC_ALL=C sort -s -t '|' -k1,1n -k2,2n "$CANDS" >"$SORTED"
 
 if [[ "$NAMEONLY" == "1" ]]; then
-  awk -F '\t' 'NR==1{print $3}' "$SORTED"
+  awk -F '|' 'NR==1{print $3}' "$SORTED"
   exit 0
 fi
+
+format_cost() {
+  LC_ALL=C awk -v cost="$1" 'BEGIN{
+    formatted = sprintf("%.2f", cost + 0)
+    sub(/0+$/, "", formatted)
+    sub(/\.$/, "", formatted)
+    if (formatted == "-0") formatted = "0"
+    printf "%s", formatted
+  }'
+}
+
+format_gpu_info() {
+  LC_ALL=C awk -v blob="$1" 'BEGIN{
+    count = split(blob, types, /, /)
+    if (count == 1) printf "%s", blob
+    else printf "%d GPU types", count
+  }'
+}
 
 json_escape() {
   LC_ALL=C awk -v s="$1" 'BEGIN{
@@ -335,9 +366,10 @@ json_escape() {
 if [[ "$JSON_OUT" == "1" ]]; then
   printf '[\n'
   first_json=1
-  while IFS=$'\t' read -r cost prio nm maxt wc wm wgg ac am ag blob tcpus tmem tgpu; do
+  while IFS='|' read -r cost prio nm maxt wc wm wgg ac am ag blob tcpus tmem tgpu; do
     [[ "$first_json" == "1" ]] || printf ',\n'
     first_json=0
+    display_cost="$(format_cost "$cost")"
     nmj="$(json_escape "$nm")"
     mj="$(json_escape "$maxt")"
     bj="$(json_escape "$blob")"
@@ -352,7 +384,7 @@ if [[ "$JSON_OUT" == "1" ]]; then
     # shellcheck disable=SC2086
     printf \
       '  {\n    "name": "%s",\n    "cost": %s,\n    "max_time": "%s",\n    "priority_tier": %s,\n    "billing_weights": {"CPU": %s, "Mem": %s, "Gres/gpu": %s},\n    "total_cpus": %s,\n    "total_memory_gb": %s,\n    "total_gpus": %s%s,\n    "gpu_blob": "%s"\n  }' \
-      "$nmj" "$cost" "$mj" "$prio" "$wc" "$wm" "$wgg" "$tcpus" "$tmem_gb" "$tgpu" "$avail_json" "$bj"
+      "$nmj" "$display_cost" "$mj" "$prio" "$wc" "$wm" "$wgg" "$tcpus" "$tmem_gb" "$tgpu" "$avail_json" "$bj"
   done <"$SORTED"
   printf '\n]\n'
   exit 0
@@ -371,38 +403,40 @@ quiet "  GPUs: ${req_gpu}"
 [[ -n "${TIME:-}" ]] && quiet "  Max time: ${TIME} hours"
 quiet ""
 
-tab=$'\t'
+table_format="%-5s %-20s %-8s %-15s %-9s %s\n"
 if [[ "$HAVE_AVAIL" == "1" ]]; then
-  printf "%s\n" "Rank${tab}Partition${tab}Cost${tab}Max Time${tab}Priority${tab}Available resources"
+  printf "$table_format" "Rank" "Partition" "Cost" "Max Time" "Priority" "Available resources"
 else
-  printf "%s\n" "Rank${tab}Partition${tab}Cost${tab}Max Time${tab}Priority${tab}Total resources"
+  printf "$table_format" "Rank" "Partition" "Cost" "Max Time" "Priority" "Total resources"
 fi
-printf "%s\n" "--------------------------------------------------------------------------------"
+printf "%s\n" "------------------------------------------------------------------------------------------------"
 
 rank=0
-while IFS=$'\t' read -r cost prio nm maxt wc wm wgg ac am ag blob tcpus tmem tgpu; do
+while IFS='|' read -r cost prio nm maxt wc wm wgg ac am ag blob tcpus tmem tgpu; do
   rank=$((rank+1))
   [[ "$rank" -le 10 ]] || break
+  display_cost="$(format_cost "$cost")"
   det=""
   if [[ "$HAVE_AVAIL" == "1" ]]; then
     if [[ "$ac" -gt 0 ]]; then det="${det}${det:+, }${ac} CPUs"; fi
     if [[ "$am" -gt 0 ]]; then det="${det}${det:+, }$(( am/1024 )) GB"; fi
     if [[ "$ag" -gt 0 ]]; then det="${det}${det:+, }${ag} GPUs"; fi
-    if [[ -n "$blob" ]]; then det="${det}${det:+, }(${blob})"; fi
+    if [[ "$ag" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob"))"; fi
   else
     if [[ "$tcpus" -gt 0 ]]; then det="${det}${det:+, }${tcpus} CPUs"; fi
     if [[ "$tmem" -gt 0 ]]; then det="${det}${det:+, }$(( (tmem+512)/1024 )) GB"; fi
     if [[ "$tgpu" -gt 0 ]]; then det="${det}${det:+, }${tgpu} GPUs"; fi
-    if [[ -n "$blob" ]]; then det="${det}${det:+, }(${blob})"; fi
+    if [[ "$tgpu" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob"))"; fi
   fi
-  printf "%d\t%s\t%s\t%s\t%s\t%s\n" "$rank" "$nm" "$cost" "$maxt" "$prio" "$det"
+  printf "$table_format" "$rank" "$nm" "$display_cost" "$maxt" "$prio" "$det"
 done <"$SORTED"
 
-IFS=$'\t' read -r best_cost best_prio best_nm best_maxt best_wc best_wm best_wgg best_ac best_am best_ag best_blob best_tcpus best_tmem best_tgpu < <(head -n1 "$SORTED")
+IFS='|' read -r best_cost best_prio best_nm best_maxt best_wc best_wm best_wgg best_ac best_am best_ag best_blob best_tcpus best_tmem best_tgpu < <(head -n1 "$SORTED")
+best_display_cost="$(format_cost "$best_cost")"
 
 quiet ""
 quiet "Best recommendation: ${best_nm}"
-quiet "   Cost: ${best_cost} billing units"
+quiet "   Cost: ${best_display_cost} billing units"
 quiet "   Max time: ${best_maxt}"
 quiet "   Priority tier: ${best_prio}"
 

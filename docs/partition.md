@@ -172,12 +172,12 @@ Recommended partitions for your requirements (using available resources):
 
 Rank Partition            Cost       Max Time        Priority Available Resources
 -------------------------------------------------------------------------------------
-1    gpu_test             0.000      12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
-2    serial_requeue       107.600    3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
-3    gpu_requeue          107.600    3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
+1    gpu_test             0          12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
+2    serial_requeue       107.6      3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
+3    gpu_requeue          107.6      3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
 
 Best recommendation: gpu_test
-   Cost: 0.000 billing units
+   Cost: 0 billing units
    Max time: 12:00:00
    Priority tier: 4
    Billing weights: {'CPU': 0.0, 'Mem': 0.0, 'Gres/gpu': 0.0}
@@ -199,11 +199,11 @@ Recommended partitions for your requirements (using available resources):
 
 Rank Partition            Cost       Max Time        Priority Available Resources
 -------------------------------------------------------------------------------------
-1    gpu_test             0.000      12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
-2    gpu                  214.260    3-00:00:00      3        162 CPUs, 15745 GB, 6 GPUs (a100)
+1    gpu_test             0          12:00:00        4        605 CPUs, 4081 GB, 82 GPUs (a100)
+2    gpu                  214.26     3-00:00:00      3        162 CPUs, 15745 GB, 6 GPUs (a100)
 
 Best recommendation: gpu_test
-   Cost: 0.000 billing units
+   Cost: 0 billing units
    Max time: 12:00:00
    Priority tier: 4
    Billing weights: {'CPU': 0.0, 'Mem': 0.0, 'Gres/gpu': 0.0}
@@ -222,9 +222,9 @@ Recommended partitions for your requirements (using available resources):
 
 Rank Partition            Cost       Max Time        Priority Available Resources
 -------------------------------------------------------------------------------------
-1    serial_requeue       107.600    3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
-2    gpu_requeue          107.600    3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
-3    seas_gpu             337.280    7-00:00:00      3        1299 CPUs, 27983 GB, 22 GPUs
+1    serial_requeue       107.6      3-00:00:00      1        21433 CPUs, 341502 GB, 277 GPUs
+2    gpu_requeue          107.6      3-00:00:00      2        5862 CPUs, 162313 GB, 277 GPUs
+3    seas_gpu             337.28     7-00:00:00      3        1299 CPUs, 27983 GB, 22 GPUs
 ```
 
 ### Summary with GPU Information
