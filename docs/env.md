@@ -11,16 +11,19 @@ override them in your shell rc or via `export` before running any tool.
 
 **Used by:** every `st` invocation
 
-Path to the shared usage log. Each invocation appends one tab-separated record
-containing a UTC timestamp, resolved username, hostname, shell-escaped working
-directory, `st` version, Slurm job ID (`-` when unset), and shell-escaped
-command.
+Path to the shared JSONL usage log. Each invocation appends one JSON object
+containing a UTC timestamp, resolved username, hostname, working directory,
+`st` version, Slurm job ID (`-` when unset), and shell-escaped command.
 
 ```bash
-export SLURM_TOOLS_USAGE_LOG="/scratch/st/usage_$(hostname).log"
+export SLURM_TOOLS_USAGE_LOG="/scratch/st/usage_$(hostname).jsonl"
 ```
 
-Default: `/scratch/st/usage_$(hostname).log`
+Default: `/scratch/st/usage_$(hostname).jsonl`
+
+```json
+{"timestamp":"2026-06-04T17:41:54Z","user":"username","hostname":"login01","cwd":"/home/username/project","st_version":"0.1.2","slurm_job_id":"-","command":"st --version"}
+```
 
 The parent directory and file are created on a best-effort basis with modes
 `1777` and `0666`, respectively. Pre-create them with tighter group permissions

@@ -19,9 +19,35 @@ read_version() {
   fi
 }
 
+json_escape() {
+  local value="${1-}" escaped="" char code i
+  local LC_ALL=C
+
+  for ((i = 0; i < ${#value}; i++)); do
+    char="${value:i:1}"
+    case "$char" in
+      '"') escaped+='\"' ;;
+      \\) escaped+='\\' ;;
+      $'\b') escaped+='\b' ;;
+      $'\f') escaped+='\f' ;;
+      $'\n') escaped+='\n' ;;
+      $'\r') escaped+='\r' ;;
+      $'\t') escaped+='\t' ;;
+      *)
+        printf -v code '%d' "'$char"
+        if [[ "$code" -lt 32 ]]; then
+          printf -v char '\\u%04x' "$code"
+        fi
+        escaped+="$char"
+        ;;
+    esac
+  done
+  printf '%s' "$escaped"
+}
+
 log_usage() {
   local log_file log_dir hostname_value hostname_file timestamp user
-  local cwd_value cwd version slurm_job_id command quoted arg
+  local cwd version slurm_job_id command quoted arg record
 
   if ! hostname_value="$(hostname 2>/dev/null)" || [[ -z "$hostname_value" ]]; then
     hostname_value="unknown"
@@ -32,7 +58,7 @@ log_usage() {
     log_file="$SLURM_TOOLS_USAGE_LOG"
   else
     hostname_file="${hostname_value//\//_}"
-    log_file="/scratch/st/usage_${hostname_file}.log"
+    log_file="/scratch/st/usage_${hostname_file}.jsonl"
   fi
 
   if ! timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
@@ -43,18 +69,27 @@ log_usage() {
   fi
   user="${user//$'\t'/ }"
   user="${user//$'\n'/ }"
-  if ! cwd_value="$(pwd -P 2>/dev/null)"; then
-    cwd_value="${PWD:-unknown}"
+  if ! cwd="$(pwd -P 2>/dev/null)"; then
+    cwd="${PWD:-unknown}"
   fi
-  printf -v cwd '%q' "$cwd_value"
   version="$(read_version)"
-  printf -v slurm_job_id '%q' "${SLURM_JOB_ID:--}"
+  slurm_job_id="${SLURM_JOB_ID:--}"
 
   printf -v command '%q' "st"
   for arg in "$@"; do
     printf -v quoted '%q' "$arg"
     command+=" ${quoted}"
   done
+
+  printf -v record \
+    '{"timestamp":"%s","user":"%s","hostname":"%s","cwd":"%s","st_version":"%s","slurm_job_id":"%s","command":"%s"}' \
+    "$(json_escape "$timestamp")" \
+    "$(json_escape "$user")" \
+    "$(json_escape "$hostname_value")" \
+    "$(json_escape "$cwd")" \
+    "$(json_escape "$version")" \
+    "$(json_escape "$slurm_job_id")" \
+    "$(json_escape "$command")"
 
   log_dir="${log_file%/*}"
   [[ "$log_dir" == "$log_file" ]] && log_dir="."
@@ -68,8 +103,7 @@ log_usage() {
     if command -v flock >/dev/null 2>&1; then
       flock -w 1 -x 9 || true
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$timestamp" "$user" "$hostname_value" "$cwd" "$version" "$slurm_job_id" "$command" >&9
+    printf '%s\n' "$record" >&9
   ) 2>/dev/null || true
 }
 
