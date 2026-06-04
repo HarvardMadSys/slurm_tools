@@ -359,8 +359,16 @@ format_cost() {
 }
 
 format_gpu_info() {
-  LC_ALL=C awk -v blob="$1" 'BEGIN{
+  LC_ALL=C awk -v blob="$1" -v filter="$2" 'BEGIN{
     count = split(blob, types, /, /)
+    if (filter != "") {
+      matched = ""; f = tolower(filter)
+      for (i = 1; i <= count; i++) {
+        if (index(tolower(types[i]), f) > 0)
+          matched = matched (matched == "" ? "" : ", ") types[i]
+      }
+      if (matched != "") { printf "%s", matched; exit }
+    }
     if (count == 1) printf "%s", blob
     else printf "%d GPU types", count
   }'
@@ -433,13 +441,13 @@ while IFS='|' read -r cost prio nm maxt wc wm wgg ac am ag blob tcpus tmem tgpu;
   if [[ "$HAVE_AVAIL" == "1" ]]; then
     if [[ "$ac" -gt 0 ]]; then det="${det}${det:+, }${ac} CPUs"; fi
     if [[ "$am" -gt 0 ]]; then det="${det}${det:+, }$(( am/1024 )) GB"; fi
-    if [[ "$ag" -gt 0 ]]; then det="${det}${det:+, }${ag} GPUs"; fi
-    if [[ "$ag" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob"))"; fi
+    if [[ "$req_gpu" -gt 0 || "$ag" -gt 0 ]]; then det="${det}${det:+, }${ag} GPUs"; fi
+    if [[ "$tgpu" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob" "${GPUTYPE:-}${GPUMEM:-}"))"; fi
   else
     if [[ "$tcpus" -gt 0 ]]; then det="${det}${det:+, }${tcpus} CPUs"; fi
     if [[ "$tmem" -gt 0 ]]; then det="${det}${det:+, }$(( (tmem+512)/1024 )) GB"; fi
     if [[ "$tgpu" -gt 0 ]]; then det="${det}${det:+, }${tgpu} GPUs"; fi
-    if [[ "$tgpu" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob"))"; fi
+    if [[ "$tgpu" -gt 0 && -n "$blob" ]]; then det="${det}${det:+, }($(format_gpu_info "$blob" "${GPUTYPE:-}${GPUMEM:-}"))"; fi
   fi
   printf "$table_format" "$rank" "$nm" "$display_cost" "$maxt" "$prio" "$det"
 done <"$SORTED"
