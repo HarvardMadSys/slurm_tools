@@ -5,6 +5,10 @@
 #   SLURM_TOOLS_SKIP_UPGRADE      Set to 1 to disable auto-upgrade
 #   SLURM_TOOLS_FORCE_UPGRADE_CHECK  Set to 1 to force version check
 
+slurm_tools_is_uint() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+}
+
 slurm_tools_read_version() {
   local root="${SLURM_TOOLS_SCRIPT_DIR:-}"
   if [[ -f "${root}/VERSION" ]]; then
@@ -242,7 +246,15 @@ slurm_tools_parse_job_args() {
 # GRES_ARGS array. $1 is optional extra text appended to the parameters log
 # (e.g. ", SCRIPT=foo"). Exits non-zero on unresolved partition / bad GPU type.
 slurm_tools_prepare_job() {
-  local extra="${1:-}" was_best=0
+  local extra="${1:-}" was_best=0 var
+
+  # Reject non-numeric resource values before they reach arithmetic / sbatch.
+  for var in NODE_COUNT CPU_CORE MEM_GB GPU_COUNT TIMEOUT_HOURS; do
+    if ! slurm_tools_is_uint "${!var}"; then
+      slurm_tools_print_log "Invalid value for ${var}: '${!var}' (expected a non-negative integer)"
+      exit 1
+    fi
+  done
 
   if [[ -z "${JOB_NAME}" ]]; then
     JOB_NAME="$(slurm_tools_default_job_name "$GPU_COUNT" "$GPU_TYPE")"
@@ -313,7 +325,9 @@ slurm_tools_job_nodelist() {
 # ~/.alloc/<job_name> receives the SLURM NodeList string (e.g. node[01-04]).
 slurm_tools_wait_for_allocation() {
   local jid="$1" job_name="$2"
-  local state nodelist first_node
+  local state nodelist first_node alloc_name
+  # Job names may contain '/'; keep the record filename to a single path component.
+  alloc_name="${job_name//\//_}"
 
   while true; do
     state="$(slurm_tools_job_state "$jid")"
@@ -330,7 +344,7 @@ slurm_tools_wait_for_allocation() {
         if [[ -n "$first_node" && "$first_node" != "(null)" && "$first_node" != "None" ]]; then
           slurm_tools_print_log "successfully allocated job_id ${jid} on ${nodelist}"
           mkdir -p "${HOME}/.alloc"
-          printf '%s\n' "$nodelist" >"${HOME}/.alloc/${job_name}"
+          printf '%s\n' "$nodelist" >"${HOME}/.alloc/${alloc_name}"
           return 0
         fi
         ;;
