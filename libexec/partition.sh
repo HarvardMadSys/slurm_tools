@@ -29,6 +29,8 @@ EOF
 
 abort() { printf "%s\n" "$*" >&2; exit 1; }
 
+is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+
 quiet() { [[ "$NAMEONLY" == "1" || "$JSON_OUT" == "1" ]] && return 0; printf "%s\n" "$*"; }
 
 CPU=""; MEM=""; GPU=0; TIME=""; SUMMARY=0; JSON_OUT=0; NAMEONLY=0; TOTAL_RES=0; GPUTYPE=""; GPUMEM=""; EXCLUDE=""
@@ -64,17 +66,11 @@ if [[ "$SUMMARY" != "1" ]]; then
   [[ -n "${CPU:-}" && -n "${MEM:-}" ]] || abort "Error: -c/--cpus and -m/--mem are required unless using --summary"
 fi
 
-nodes_line_for_partition() {
-  local trimmed rest
-  while IFS= read -r line; do
-    trimmed="${line#"${line%%[![:space:]]*}"}"
-    # Must be Nodes=, not AllocNodes= (substring match caused NODE_LIST=ALL).
-    [[ "$trimmed" == Nodes=* ]] || continue
-    rest="${trimmed#Nodes=}"
-    printf "%s\n" "${rest%%[![:graph:]]*}"; return 0
-  done < <(scontrol show partition "$1")
-  return 1
-}
+# Reject non-numeric resource values instead of silently treating them as 0.
+[[ -z "${CPU:-}" ]] || is_uint "$CPU" || abort "Error: -c/--cpus must be a non-negative integer: ${CPU}"
+[[ -z "${MEM:-}" ]] || is_uint "$MEM" || abort "Error: -m/--mem must be a non-negative integer: ${MEM}"
+is_uint "$GPU" || abort "Error: -g/--gpus must be a non-negative integer: ${GPU}"
+[[ -z "${TIME:-}" ]] || is_uint "$TIME" || abort "Error: -t/--time must be a non-negative integer: ${TIME}"
 
 avail_and_blob_stream() {
   LC_ALL=C awk '
@@ -320,7 +316,12 @@ while IFS='|' read -r nm maxt tcpus tnodes tmem tgpu st prio wc wm wgg ac am ag 
 
   if [[ "$chk_c" -gt 0 && "$req_cpu" -gt "$chk_c" ]]; then continue; fi
   if [[ "$chk_m" -gt 0 && "$req_mem_mb" -gt "$chk_m" ]]; then continue; fi
-  if [[ "$req_gpu" -gt 0 && "$chk_g" -gt 0 && "$chk_g" -lt "$req_gpu" ]]; then continue; fi
+  if [[ "$req_gpu" -gt 0 ]]; then
+    # A partition with no GPUs at all can never satisfy a GPU request.
+    [[ "$tgpu" -gt 0 ]] || continue
+    # Require enough GPUs in the evaluated mode (free when available, total with --total).
+    if [[ "$chk_g" -lt "$req_gpu" ]]; then continue; fi
+  fi
 
   if [[ "$need_time" == "1" ]]; then
     pm="$(partition_minutes "$maxt")"

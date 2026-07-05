@@ -80,12 +80,20 @@ function val_rest(line, key, klen, pos) {
   return substr(line, pos + klen + 1)
 }
 
-function gpus_from_gres(g) {
-  if (match(g, /:[0-9]+\(S:/))
-    return substr(g, RSTART + 1, RLENGTH - 4) + 0
-  if (match(g, /:[0-9]+$/))
-    return substr(g, RSTART + 1, RLENGTH - 1) + 0
-  return 0
+function gpus_from_gres(g,   parts, np, i, e, n) {
+  # Sum every gpu:<type>:<count> entry so mixed-GPU nodes are counted fully.
+  # Strip (S:...) socket annotations first, then split on commas.
+  gsub(/\([^)]*\)/, "", g)
+  np = split(g, parts, ",")
+  n = 0
+  for (i = 1; i <= np; i++) {
+    e = parts[i]
+    sub(/^[[:space:]]+/, "", e); sub(/[[:space:]]+$/, "", e)
+    if (substr(e, 1, 4) != "gpu:") continue
+    if (match(e, /:[0-9]+$/))
+      n += substr(e, RSTART + 1, RLENGTH - 1) + 0
+  }
+  return n
 }
 
 length($0) == 0 { next }

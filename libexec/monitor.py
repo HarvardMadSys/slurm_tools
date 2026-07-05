@@ -88,6 +88,25 @@ def expand_node_list(node_list: str) -> List[str]:
         return []
 
     node_list = node_list.strip()
+
+    # Prefer scontrol, which understands every SLURM hostlist syntax (multiple
+    # bracket groups, mixed prefixes, etc.). Fall back to the manual parser when
+    # scontrol is unavailable or errors.
+    try:
+        result = subprocess.run(
+            ["scontrol", "show", "hostnames", node_list],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        hosts = [h.strip() for h in result.stdout.split("\n") if h.strip()]
+        hosts = [h for h in hosts if h not in ["None", "(null)"]]
+        if hosts:
+            return hosts
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
     nodes = []
 
     if "[" not in node_list:
@@ -130,19 +149,28 @@ def get_node_processes(
     node: str, username: str, process_filter: Optional[str] = None
 ) -> NodeUsage:
     """SSH to node and get process information for the user"""
-    cmd = [
-        "ssh",
-        node,
-        f"ps -u {username} -o pid,%cpu,%mem,cmd --no-headers",
-    ]
+    # Fetch process list and total memory in a single SSH round-trip so the two
+    # readings stay consistent and we halve the SSH overhead per node.
+    marker = "===ST_MEM_SPLIT==="
+    # MemTotal is best-effort: `|| true` keeps a failed probe (restricted /proc,
+    # non-Linux node) from failing the whole SSH call, so process data still
+    # comes back. A real connection failure still makes ssh exit non-zero.
+    remote = (
+        f"ps -u {username} -o pid,%cpu,%mem,cmd --no-headers; "
+        f"echo {marker}; "
+        "grep MemTotal /proc/meminfo || true"
+    )
+    result = subprocess.run(
+        ["ssh", node, remote], capture_output=True, text=True, timeout=30, check=True
+    )
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+    ps_text, _, mem_text = result.stdout.partition(marker)
 
     processes = []
     total_cpu = 0.0
     total_memory = 0.0
 
-    for line in result.stdout.strip().split("\n"):
+    for line in ps_text.strip().split("\n"):
         if not line.strip():
             continue
 
@@ -151,10 +179,15 @@ def get_node_processes(
             continue
 
         pid = parts[0]
-        cpu_percent = float(parts[1])
-        mem_percent = float(parts[2])
+        try:
+            cpu_percent = float(parts[1])
+            mem_percent = float(parts[2])
+        except ValueError:
+            # Skip non-ps lines such as an SSH banner or MOTD leaking into stdout.
+            continue
         command = parts[3]
 
+        # Stored as %mem for now; converted to MB below once MemTotal is known.
         memory_mb = mem_percent
 
         if process_filter is None or process_filter.lower() in command.lower():
@@ -162,16 +195,12 @@ def get_node_processes(
             total_cpu += cpu_percent
             total_memory += mem_percent
 
-    cmd_mem = ["ssh", node, "grep MemTotal /proc/meminfo"]
-    mem_result = subprocess.run(cmd_mem, capture_output=True, text=True, timeout=10)
-
-    if mem_result.returncode == 0:
-        mem_match = re.search(r"MemTotal:\s+(\d+)\s+kB", mem_result.stdout)
-        if mem_match:
-            total_system_memory_mb = int(mem_match.group(1)) / 1024
-            for process in processes:
-                process.memory_mb = (process.memory_mb / 100.0) * total_system_memory_mb
-            total_memory = (total_memory / 100.0) * total_system_memory_mb
+    mem_match = re.search(r"MemTotal:\s+(\d+)\s+kB", mem_text)
+    if mem_match:
+        total_system_memory_mb = int(mem_match.group(1)) / 1024
+        for process in processes:
+            process.memory_mb = (process.memory_mb / 100.0) * total_system_memory_mb
+        total_memory = (total_memory / 100.0) * total_system_memory_mb
 
     return NodeUsage(node, total_cpu, total_memory, len(processes), processes)
 
