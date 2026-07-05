@@ -97,6 +97,7 @@ def expand_node_list(node_list: str) -> List[str]:
             ["scontrol", "show", "hostnames", node_list],
             capture_output=True,
             text=True,
+            timeout=30,
             check=True,
         )
         hosts = [h.strip() for h in result.stdout.split("\n") if h.strip()]
@@ -151,10 +152,13 @@ def get_node_processes(
     # Fetch process list and total memory in a single SSH round-trip so the two
     # readings stay consistent and we halve the SSH overhead per node.
     marker = "===ST_MEM_SPLIT==="
+    # MemTotal is best-effort: `|| true` keeps a failed probe (restricted /proc,
+    # non-Linux node) from failing the whole SSH call, so process data still
+    # comes back. A real connection failure still makes ssh exit non-zero.
     remote = (
         f"ps -u {username} -o pid,%cpu,%mem,cmd --no-headers; "
         f"echo {marker}; "
-        "grep MemTotal /proc/meminfo"
+        "grep MemTotal /proc/meminfo || true"
     )
     result = subprocess.run(
         ["ssh", node, remote], capture_output=True, text=True, timeout=30, check=True
@@ -175,8 +179,12 @@ def get_node_processes(
             continue
 
         pid = parts[0]
-        cpu_percent = float(parts[1])
-        mem_percent = float(parts[2])
+        try:
+            cpu_percent = float(parts[1])
+            mem_percent = float(parts[2])
+        except ValueError:
+            # Skip non-ps lines such as an SSH banner or MOTD leaking into stdout.
+            continue
         command = parts[3]
 
         # Stored as %mem for now; converted to MB below once MemTotal is known.
