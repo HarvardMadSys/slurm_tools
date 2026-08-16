@@ -216,7 +216,7 @@ def get_node_processes_safe(
         return NodeUsage(node, 0, 0, 0, [], f"SSH error: {e}")
 
 
-def print_usage_table(node_usages: List[NodeUsage], process_filter: Optional[str] = None):
+def print_usage_table(node_usages: List[NodeUsage], process_filter: Optional[str] = None, top: bool = False):
     """Print formatted table of node usage to stdout"""
     if not node_usages:
         print("No data to display")
@@ -250,6 +250,14 @@ def print_usage_table(node_usages: List[NodeUsage], process_filter: Optional[str
             total_cpu += usage.total_cpu_percent
             total_memory += usage.total_memory_mb
 
+        if top and usage.processes:
+            print(f"    {'PID':<10} {'CPU%':<8} {'MEM(MB)':<12} {'Command'}")
+            for proc in usage.processes:
+                cmd = proc.command
+                if len(cmd) > 80:
+                    cmd = cmd[:77] + "..."
+                print(f"    {proc.pid:<10} {proc.cpu_percent:<8.1f} {proc.memory_mb:<12.1f} {cmd}")
+
     print("\nSummary:")
     print(f"Total processes: {total_processes}")
     print(f"Total CPU%: {total_cpu:.1f}")
@@ -270,12 +278,27 @@ def main():
         default=None,
         help="filter processes by command substring (case-insensitive)",
     )
+    parser.add_argument(
+        "--user",
+        "-u",
+        dest="username",
+        default=None,
+        help="username whose processes to inspect (default: current user)",
+    )
+    parser.add_argument(
+        "--top",
+        action="store_true",
+        help="also print per-node process detail in a top-like table",
+    )
 
     args = parser.parse_args()
 
-    username = subprocess.run(
-        ["whoami"], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    if args.username:
+        username = args.username
+    else:
+        username = subprocess.run(
+            ["whoami"], capture_output=True, text=True, check=True
+        ).stdout.strip()
 
     log(f"Monitoring job {args.jobid} for user: {username}")
     log(f"Getting nodes for job {args.jobid}...")
@@ -337,7 +360,7 @@ def main():
         print(json.dumps(data, indent=2))
     else:
         print()
-        print_usage_table(node_usages, args.proc)
+        print_usage_table(node_usages, args.proc, top=args.top)
 
 
 if __name__ == "__main__":
