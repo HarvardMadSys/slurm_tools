@@ -48,7 +48,7 @@ shell_join() {
   printf "%s" "$1"
   shift
   for arg in "$@"; do
-    printf " %s" "${arg// /\ }"
+    printf " %q" "$arg"
   done
 }
 
